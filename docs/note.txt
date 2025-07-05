@@ -1,0 +1,1 @@
+analyse les fichiers @devbook.md, @devbook-backend.md  et @db.sql et creer l'ensemble des entitess du projet en t'inspirant des fichiers deja present
