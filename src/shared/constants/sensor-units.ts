@@ -41,7 +41,6 @@ export const SENSOR_UNITS = {
   KILOWATT: 'kW',
   KILOWATT_HOUR: 'kWh',
   OHM: 'Ω',
-  HERTZ: 'Hz',
   
   // Distance
   METER: 'm',
@@ -63,8 +62,6 @@ export const SENSOR_UNITS = {
   
   // Level
   PERCENT: '%',
-  METER: 'm',
-  CENTIMETER: 'cm',
   
   // Vibration
   METER_PER_SECOND_SQUARED: 'm/s²',
@@ -96,6 +93,7 @@ export const SENSOR_UNITS = {
   // Custom
   CUSTOM: 'custom',
   NONE: '',
+  BOOLEAN: 'boolean',
 } as const;
 
 export type SensorUnit = typeof SENSOR_UNITS[keyof typeof SENSOR_UNITS];
@@ -141,7 +139,6 @@ export const SENSOR_UNIT_LABELS: Record<SensorUnit, string> = {
   [SENSOR_UNITS.LITER_PER_MINUTE]: 'Liter per minute',
   [SENSOR_UNITS.CUBIC_METER_PER_HOUR]: 'Cubic meter per hour',
   [SENSOR_UNITS.GALLON_PER_MINUTE]: 'Gallon per minute',
-  [SENSOR_UNITS.PERCENT]: 'Percent',
   [SENSOR_UNITS.METER_PER_SECOND_SQUARED]: 'Meter per second squared',
   [SENSOR_UNITS.G]: 'G-force',
   [SENSOR_UNITS.NEWTON]: 'Newton',
@@ -259,12 +256,67 @@ export const SENSOR_UNIT_CATEGORIES = {
   ],
 } as const;
 
+/**
+ * Formate une valeur en fonction de son unité
+ * @param value La valeur à formater
+ * @param unit L'unité de la valeur
+ * @returns La valeur formatée sous forme de chaîne de caractères
+ */
+export const formatSensorValue = (value: number | undefined, unit: SensorUnit): string => {
+  if (value === undefined || value === null) return 'N/A';
+  
+  // Arrondi en fonction du type d'unité
+  switch(unit) {
+    // Températures - 1 décimale
+    case SENSOR_UNITS.CELSIUS:
+    case SENSOR_UNITS.FAHRENHEIT:
+    case SENSOR_UNITS.KELVIN:
+      return `${value.toFixed(1)} ${unit}`;
+      
+    // Pourcentages - nombre entier
+    case SENSOR_UNITS.PERCENTAGE:
+    case SENSOR_UNITS.RELATIVE_HUMIDITY:
+      return `${Math.round(value)} ${unit}`;
+      
+    // Pression - 2 décimales pour les petites unités, 1 pour les grandes
+    case SENSOR_UNITS.PASCAL:
+    case SENSOR_UNITS.KILOPASCAL:
+    case SENSOR_UNITS.PSI:
+      return `${value.toFixed(2)} ${unit}`;
+      
+    // pH - 1 ou 2 décimales selon la précision
+    case SENSOR_UNITS.PH:
+      return `pH ${value.toFixed(1)}`;
+      
+    // Électrique - 2 décimales pour les petites valeurs, 1 pour les grandes
+    case SENSOR_UNITS.VOLT:
+    case SENSOR_UNITS.AMPERE:
+    case SENSOR_UNITS.WATT:
+      return value < 1 ? `${value.toFixed(2)} ${unit}` : `${value.toFixed(1)} ${unit}`;
+      
+    // Distance - 1 décimale pour les petites unités, 2 pour les grandes
+    case SENSOR_UNITS.METER:
+    case SENSOR_UNITS.CENTIMETER:
+      return value < 1 ? `${value.toFixed(2)} ${unit}` : `${value.toFixed(1)} ${unit}`;
+
+    // Booleen - Oui/Non
+    case SENSOR_UNITS.BOOLEAN:
+      return value ? 'Yes' : 'No';
+
+
+    // Par défaut - 1 décimale
+    default:
+      return `${value.toFixed(1)} ${unit}`;
+  }
+};
+
 export const getSensorUnitInfo = (unit: SensorUnit) => ({
   symbol: unit,
   label: SENSOR_UNIT_LABELS[unit],
   category: Object.entries(SENSOR_UNIT_CATEGORIES).find(([_, units]) => 
     units.includes(unit)
   )?.[0] || 'OTHER',
+  format: (value: number | undefined) => formatSensorValue(value, unit)
 });
 
 export const SENSOR_UNIT_OPTIONS = Object.entries(SENSOR_UNIT_LABELS).map(([value, label]) => ({

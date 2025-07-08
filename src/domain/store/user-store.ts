@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { User, UserRole } from '../entities/user.entity';
+import type { User, UserRole } from '../entities/user.entity';
+import { userApi } from '../../infrastructure/api/user-api';
 
-interface UserState {
+interface UserStoreState {
   users: User[];
   currentUser: User | null;
   isLoading: boolean;
@@ -33,7 +34,37 @@ interface UpdateUserData {
   isActive?: boolean;
 }
 
-export const useUserStore = create<UserState>((set, get) => ({
+// Validation utilities
+const isValidUser = (user: any): user is User => {
+  return (
+    user &&
+    typeof user.id === 'number' &&
+    typeof user.email === 'string' &&
+    typeof user.firstName === 'string' &&
+    typeof user.lastName === 'string' &&
+    typeof user.role === 'string' &&
+    typeof user.isActive === 'boolean'
+  );
+};
+
+const sanitizeUser = (user: any): User => {
+  if (!isValidUser(user)) {
+    throw new Error('Invalid user data');
+  }
+
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role as UserRole,
+    isActive: user.isActive,
+    createdAt: user.createdAt || new Date().toISOString(),
+    updatedAt: user.updatedAt || new Date().toISOString()
+  };
+};
+
+export const useUserStore = create<UserStoreState>((set, get) => ({
   users: [],
   currentUser: null,
   isLoading: false,
@@ -43,65 +74,16 @@ export const useUserStore = create<UserState>((set, get) => ({
   fetchUsers: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { skip = 0, limit = 20, role, search } = params;
+      const response = await userApi.getUsers(params);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock data
-      const mockUsers: User[] = [
-        {
-          id: 1,
-          email: 'admin@iot.com',
-          firstName: 'Admin',
-          lastName: 'User',
-          role: UserRole.ADMIN,
-          isActive: true,
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-01T00:00:00Z'
-        },
-        {
-          id: 2,
-          email: 'operator@iot.com',
-          firstName: 'Operator',
-          lastName: 'User',
-          role: UserRole.OPERATOR,
-          isActive: true,
-          createdAt: '2024-01-02T00:00:00Z',
-          updatedAt: '2024-01-02T00:00:00Z'
-        },
-        {
-          id: 3,
-          email: 'viewer@iot.com',
-          firstName: 'Viewer',
-          lastName: 'User',
-          role: UserRole.VIEWER,
-          isActive: true,
-          createdAt: '2024-01-03T00:00:00Z',
-          updatedAt: '2024-01-03T00:00:00Z'
-        }
-      ];
+      // Validate and sanitize users
+      const validUsers = response
+        .filter(isValidUser)
+        .map(sanitizeUser);
 
-      let filteredUsers = mockUsers;
-      
-      if (role) {
-        filteredUsers = filteredUsers.filter(user => user.role === role);
-      }
-      
-      if (search) {
-        filteredUsers = filteredUsers.filter(user => 
-          user.email.toLowerCase().includes(search.toLowerCase()) ||
-          user.firstName.toLowerCase().includes(search.toLowerCase()) ||
-          user.lastName.toLowerCase().includes(search.toLowerCase())
-        );
-      }
-
-      const paginatedUsers = filteredUsers.slice(skip, skip + limit);
-      
       set({
-        users: paginatedUsers,
-        totalUsers: filteredUsers.length,
+        users: validUsers,
+        totalUsers: response.total || validUsers.length,
         isLoading: false
       });
     } catch (error) {
@@ -115,22 +97,12 @@ export const useUserStore = create<UserState>((set, get) => ({
   fetchUserById: async (id: number) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 300));
+      const response = await userApi.getUserById(id);
       
-      const mockUser: User = {
-        id,
-        email: `user${id}@iot.com`,
-        firstName: `User${id}`,
-        lastName: 'Test',
-        role: UserRole.USER,
-        isActive: true,
-        createdAt: '2024-01-01T00:00:00Z',
-        updatedAt: '2024-01-01T00:00:00Z'
-      };
+      const user = sanitizeUser(response);
       
       set({ isLoading: false });
-      return mockUser;
+      return user;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to fetch user',
@@ -143,16 +115,9 @@ export const useUserStore = create<UserState>((set, get) => ({
   createUser: async (userData: CreateUserData) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await userApi.createUser(userData);
       
-      const newUser: User = {
-        id: Date.now(),
-        ...userData,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      const newUser = sanitizeUser(response);
       
       set(state => ({
         users: [...state.users, newUser],
@@ -173,19 +138,9 @@ export const useUserStore = create<UserState>((set, get) => ({
   updateUser: async (id: number, userData: UpdateUserData) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await userApi.updateUser(id, userData);
       
-      const updatedUser: User = {
-        id,
-        email: `user${id}@iot.com`,
-        firstName: userData.firstName || 'User',
-        lastName: userData.lastName || 'Test',
-        role: userData.role || UserRole.USER,
-        isActive: userData.isActive ?? true,
-        createdAt: '2024-01-01T00:00:00Z',
-        updatedAt: new Date().toISOString()
-      };
+      const updatedUser = sanitizeUser(response);
       
       set(state => ({
         users: state.users.map(user => user.id === id ? updatedUser : user),
@@ -205,8 +160,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   deleteUser: async (id: number) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await userApi.deleteUser(id);
       
       set(state => ({
         users: state.users.filter(user => user.id !== id),
@@ -223,6 +177,10 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   setCurrentUser: (user: User) => {
+    if (!isValidUser(user)) {
+      console.warn('Invalid user data provided to setCurrentUser');
+      return;
+    }
     set({ currentUser: user });
   },
 

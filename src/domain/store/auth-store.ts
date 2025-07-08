@@ -1,19 +1,31 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { AuthState, LoginCredentials, AuthTokens, AuthUser } from '../../shared/types/auth.types';
+import type { LoginCredentials, AuthTokens } from '@shared/types/auth.types';
+import type { User as ApiUser, LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse, LogoutRequest } from '@shared/types/api.types';
+import { authApi } from '@infrastructure/api/auth-api';
 import { User } from '../entities/user.entity';
-import { User as ApiUser } from '../../shared/types/api.types';
+import { getErrorMessage } from '@infrastructure/api/axios-client';
+import type { AxiosError } from 'axios';
 
-interface AuthStore extends AuthState {
+interface AuthStoreState {
+  user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+interface AuthStore extends AuthStoreState {
   // Actions
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
-  refreshToken: () => Promise<void>;
+  refreshAuthToken: () => Promise<void>;
   setUser: (user: User) => void;
   setTokens: (tokens: AuthTokens) => void;
   clearAuth: () => void;
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
+  getCurrentUser: () => Promise<User | null>;
   
   // Computed
   isAuthenticated: boolean;
@@ -55,7 +67,10 @@ export const useAuthStore = create<AuthStore>()(
         if (!token) return null;
         
         try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
+          const parts = token.split('.');
+          if (parts.length !== 3 || !parts[1]) return null;
+          
+          const payload = JSON.parse(atob(parts[1]));
           return payload.exp * 1000; // Convert to milliseconds
         } catch {
           return null;
@@ -67,40 +82,24 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
         
         try {
-          // This would call the actual API
-          // const response = await authApi.login(credentials);
-          
-          // Mock response for now
-          const mockResponse: AuthUser = {
-            user: {
-              id: 1,
-              email: credentials.email,
-              first_name: 'John',
-              last_name: 'Doe',
-              role: 'admin',
-              is_active: true,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-            tokens: {
-              accessToken: 'mock-access-token',
-              refreshToken: 'mock-refresh-token',
-            },
+          const loginRequest: LoginRequest = {
+            email: credentials.email,
+            password: credentials.password,
           };
 
-          const user = new User(mockResponse.user);
-          
+          const response: LoginResponse = await authApi.login(loginRequest);
+
+          const { accessToken } = response;
+
           set({
-            user,
-            accessToken: mockResponse.tokens.accessToken,
-            refreshToken: mockResponse.tokens.refreshToken,
-            isLoading: false,
-            error: null,
+            accessToken: accessToken,
           });
 
           // Store tokens in localStorage if rememberMe is true
           if (credentials.rememberMe) {
-            localStorage.setItem('auth_tokens', JSON.stringify(mockResponse.tokens));
+            localStorage.setItem('auth_tokens', JSON.stringify({
+              accessToken: accessToken,
+            }));
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Login failed';
@@ -113,6 +112,28 @@ export const useAuthStore = create<AuthStore>()(
           });
           throw error;
         }
+    },
+
+      getCurrentUser: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await authApi.getCurrentUser();
+          const userEntity = new User(response);
+          set({
+            user: userEntity,
+            isLoading: false,
+            isAuthenticated: true,
+            error: null,
+          });
+          return userEntity;
+        } catch (error) {
+          const errorMessage = getErrorMessage(error as AxiosError);
+          console.error('Failed to get current user:', error);
+          set({ isLoading: false, error: errorMessage, isAuthenticated: false });
+          throw error;
+        } finally {
+          set({ isLoading: false });
+        }
       },
 
       logout: async () => {
@@ -123,8 +144,14 @@ export const useAuthStore = create<AuthStore>()(
           
           // Call logout API if we have a refresh token
           if (refreshToken) {
-            // await authApi.logout({ refresh_token: refreshToken });
+            const logoutRequest: LogoutRequest = {
+              refreshToken: refreshToken,
+            };
+            await authApi.logout(logoutRequest);
           }
+          localStorage.removeItem('auth_tokens');
+
+
         } catch (error) {
           // Continue with logout even if API call fails
           console.warn('Logout API call failed:', error);
@@ -135,7 +162,7 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      refreshToken: async () => {
+      refreshAuthToken: async () => {
         const { refreshToken } = get();
         
         if (!refreshToken) {
@@ -145,16 +172,14 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
         
         try {
-          // This would call the actual API
-          // const response = await authApi.refreshToken({ refresh_token: refreshToken });
-          
-          // Mock response for now
-          const mockResponse = {
-            access_token: 'new-mock-access-token',
+          const refreshRequest: RefreshTokenRequest = {
+            refreshToken: refreshToken,
           };
+          
+          const response: RefreshTokenResponse = await authApi.refreshToken(refreshRequest);
 
           set({
-            accessToken: mockResponse.access_token,
+            accessToken: response.accessToken,
             isLoading: false,
             error: null,
           });
@@ -187,6 +212,8 @@ export const useAuthStore = create<AuthStore>()(
           user: null,
           accessToken: null,
           refreshToken: null,
+          isLoading: false,
+          isAuthenticated: false,
           error: null,
         });
         
@@ -236,7 +263,7 @@ export const useAuthStore = create<AuthStore>()(
       onRehydrateStorage: () => (state) => {
         // Rehydrate user entity after storage
         if (state?.user) {
-          state.user = new User(state.user as ApiUser);
+          state.user = new User(state.user as unknown as ApiUser);
         }
       },
     }
@@ -244,7 +271,7 @@ export const useAuthStore = create<AuthStore>()(
 );
 
 // Auto-refresh token when needed
-let refreshTimer: NodeJS.Timeout | null = null;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 const setupTokenRefresh = () => {
   const store = useAuthStore.getState();
@@ -256,7 +283,7 @@ const setupTokenRefresh = () => {
   if (store.isAuthenticated && store.shouldRefreshToken()) {
     refreshTimer = setTimeout(async () => {
       try {
-        await store.refreshToken();
+        await store.refreshAuthToken();
         setupTokenRefresh(); // Setup next refresh
       } catch (error) {
         console.error('Auto token refresh failed:', error);
@@ -287,7 +314,7 @@ export const useAuth = () => useAuthStore((state) => ({
 export const useAuthActions = () => useAuthStore((state) => ({
   login: state.login,
   logout: state.logout,
-  refreshToken: state.refreshToken,
+  refreshAuthToken: state.refreshAuthToken,
   clearAuth: state.clearAuth,
   setError: state.setError,
 }));

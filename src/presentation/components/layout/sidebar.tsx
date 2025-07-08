@@ -16,7 +16,6 @@ import {
   MapPin,
   Users,
   AlertTriangle,
-  Gauge,
   Activity,
 } from 'lucide-react';
 import { useAuthStore } from '@domain/store/auth-store';
@@ -32,33 +31,30 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  {
-    label: 'Dashboard',
-    path: '/dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    label: 'Devices',
-    path: '/devices',
-    icon: Cpu,
-    badge: '12',
-  },
-  {
-    label: 'Components',
-    path: '/components',
-    icon: Settings,
-  },
+  // {
+  //   label: 'Dashboard',
+  //   path: '/dashboard',
+  //   icon: LayoutDashboard,
+  // },
+  // {
+  //   label: 'Devices',
+  //   path: '/devices',
+  //   icon: Cpu,
+  // },
+  // {
+  //   label: 'Components',
+  //   path: '/components',
+  //   icon: Settings,
+  // },
   {
     label: 'Sensors',
     path: '/sensors',
     icon: BarChart3,
-    badge: '24',
   },
   {
     label: 'Actuators',
-    path: '/actuators/control',
+    path: '/actuators',
     icon: Zap,
-    badge: '8',
   },
   {
     label: 'Zones',
@@ -67,21 +63,20 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Automation',
-    path: '/automation/rules',
+    path: '/automation',
     icon: Activity,
   },
   {
     label: 'Alerts',
     path: '/automation/alerts',
     icon: AlertTriangle,
-    badge: '3',
   },
-  {
-    label: 'Users',
-    path: '/users',
-    icon: Users,
-    requiresAdmin: true,
-  },
+  // {
+  //   label: 'Users',
+  //   path: '/users',
+  //   icon: Users,
+  //   requiresAdmin: true,
+  // },
 ];
 
 interface SidebarNavButtonProps { item: NavItem }

@@ -9,199 +9,290 @@ import {
   HStack,
   VStack,
   Icon,
-  Flex,
-  Slider,
+  Stat,
+  Tabs,
   Menu,
-  Portal,
+  Alert,
   useDisclosure,
+  Input,
+  Select,
+  Switch,
+  Textarea,
+  IconButton,
+  Table,
   Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogBody,
+  Portal,
+  createListCollection,
+  Card,
+  Button,
+  Slider,
   NumberInput,
   Separator,
-  Card,
+  Flex,
+  AlertRoot,
+  AlertTitle,
+  AlertDescription,
+  Spinner,
 } from '@chakra-ui/react';
-import { Button, IconButton } from '@ui/button';
 import {
-  Lightbulb,
-  Fan,
-  Lock,
-  Settings,
-  Power,
-  PowerOff,
-  Pause,
-  Clock,
-  MapPin,
-  Battery,
-  Signal,
+  Edit,
+  Trash2,
+  MoreVertical,
+  Wifi,
   WifiOff,
   AlertTriangle,
   CheckCircle,
-  Eye,
-  Edit,
-  MoreVertical,
+  Clock,
+  Download,
   RefreshCw,
   Zap,
+  Activity,
+  MapPin,
+  Battery,
+  Signal,
+  ArrowLeft,
+  Play,
+  Pause,
+  Eye,
+  Settings,
+  Power,
+  PowerOff,
   Sun,
   Volume2,
   X,
+  Target,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Lightbulb,
+  Fan,
+  Lock,
+  Gauge,
+  Info,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useColorModeValue } from '@ui/chakra/color-mode';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Field } from '@/presentation/components/ui/chakra/field';
+import { useColorModeValue } from '@presentation/components/ui/chakra/color-mode';
+import { useActuatorStore } from '../../../domain/store/actuator-store';
+import { ActuatorType, ActuatorState, CommandStatus, ConnStatus, type ActuatorDeployment } from '../../../domain/entities/actuator.entity';
+import { actuatorApi, componentApi } from '@infrastructure/api';
+import { getErrorMessage } from '@infrastructure/api/axios-client';
+import type { AxiosError } from 'axios';
 
-interface Actuator {
-  id: string;
-  name: string;
-  type: 'light' | 'fan' | 'lock' | 'speaker' | 'thermostat' | 'blind';
-  location: string;
-  status: 'online' | 'offline' | 'error';
-  powerState: 'on' | 'off' | 'standby';
-  currentValue: number;
-  targetValue: number;
-  minValue: number;
-  maxValue: number;
-  unit: string;
-  batteryLevel: number;
-  signalStrength: number;
-  lastCommand: string;
-  lastUpdated: string;
-  capabilities: string[];
-  schedule?: {
-    enabled: boolean;
-    startTime: string;
-    endTime: string;
-    days: string[];
+// Composant pour l'icône de l'actionneur
+const ActuatorIcon: React.FC<{ type: ActuatorType; size?: number }> = ({ type, size = 20 }) => {
+  const getIcon = () => {
+    switch (type) {
+      case ActuatorType.LIGHT:
+        return <Lightbulb size={size} />;
+      case ActuatorType.DC_MOTOR:
+      case ActuatorType.AC_MOTOR:
+        return <Fan size={size} />;
+      case ActuatorType.RELAY:
+        return <Power size={size} />;
+      case ActuatorType.SERVO:
+      case ActuatorType.STEPPER:
+        return <Target size={size} />;
+      case ActuatorType.HEATER:
+        return <Settings size={size} />;
+      case ActuatorType.COOLER:
+        return <Fan size={size} />;
+      case ActuatorType.VALVE:
+      case ActuatorType.PUMP:
+        return <Activity size={size} />;
+      case ActuatorType.DISPLAY:
+        return <Gauge size={size} />;
+      case ActuatorType.BUZZER:
+        return <Volume2 size={size} />;
+      default:
+        return <Zap size={size} />;
+    }
   };
-}
 
-const mockActuators: Actuator[] = [
-  {
-    id: 'actuator-001',
-    name: 'Living Room Light',
-    type: 'light',
-    location: 'Living Room',
-    status: 'online',
-    powerState: 'on',
-    currentValue: 75,
-    targetValue: 75,
-    minValue: 0,
-    maxValue: 100,
-    unit: '%',
-    batteryLevel: 85,
-    signalStrength: 92,
-    lastCommand: 'Set brightness to 75%',
-    lastUpdated: '2 minutes ago',
-    capabilities: ['Dimmer', 'Color Control', 'Scheduling', 'Voice Control'],
-  },
-  {
-    id: 'actuator-002',
-    name: 'Kitchen Fan',
-    type: 'fan',
-    location: 'Kitchen',
-    status: 'online',
-    powerState: 'on',
-    currentValue: 60,
-    targetValue: 60,
-    minValue: 0,
-    maxValue: 100,
-    unit: '%',
-    batteryLevel: 72,
-    signalStrength: 88,
-    lastCommand: 'Set speed to 60%',
-    lastUpdated: '5 minutes ago',
-    capabilities: ['Speed Control', 'Timer', 'Auto Mode'],
-  },
-  {
-    id: 'actuator-003',
-    name: 'Front Door Lock',
-    type: 'lock',
-    location: 'Front Door',
-    status: 'online',
-    powerState: 'on',
-    currentValue: 1,
-    targetValue: 1,
-    minValue: 0,
-    maxValue: 1,
-    unit: 'locked',
-    batteryLevel: 95,
-    signalStrength: 78,
-    lastCommand: 'Lock door',
-    lastUpdated: '1 hour ago',
-    capabilities: ['Keypad Access', 'App Control', 'Access Logs'],
-  },
-  {
-    id: 'actuator-004',
-    name: 'Bedroom Speaker',
-    type: 'speaker',
-    location: 'Bedroom',
-    status: 'offline',
-    powerState: 'off',
-    currentValue: 0,
-    targetValue: 0,
-    minValue: 0,
-    maxValue: 100,
-    unit: '%',
-    batteryLevel: 0,
-    signalStrength: 0,
-    lastCommand: 'Turn off',
-    lastUpdated: '2 hours ago',
-    capabilities: ['Volume Control', 'Bluetooth', 'Multi-room'],
-  },
-  {
-    id: 'actuator-005',
-    name: 'Office Thermostat',
-    type: 'thermostat',
-    location: 'Office',
-    status: 'online',
-    powerState: 'on',
-    currentValue: 22,
-    targetValue: 22,
-    minValue: 16,
-    maxValue: 30,
-    unit: '°C',
-    batteryLevel: 68,
-    signalStrength: 85,
-    lastCommand: 'Set temperature to 22°C',
-    lastUpdated: '10 minutes ago',
-    capabilities: ['Temperature Control', 'Scheduling', 'Energy Saving'],
-  },
-  {
-    id: 'actuator-006',
-    name: 'Living Room Blind',
-    type: 'blind',
-    location: 'Living Room',
-    status: 'online',
-    powerState: 'on',
-    currentValue: 50,
-    targetValue: 50,
-    minValue: 0,
-    maxValue: 100,
-    unit: '%',
-    batteryLevel: 45,
-    signalStrength: 65,
-    lastCommand: 'Set position to 50%',
-    lastUpdated: '30 minutes ago',
-    capabilities: ['Position Control', 'Auto Close', 'Sun Tracking'],
-  },
-];
+  const getColor = () => {
+    switch (type) {
+      case ActuatorType.LIGHT:
+        return 'yellow';
+      case ActuatorType.DC_MOTOR:
+      case ActuatorType.AC_MOTOR:
+        return 'blue';
+      case ActuatorType.RELAY:
+        return 'purple';
+      case ActuatorType.SERVO:
+      case ActuatorType.STEPPER:
+        return 'green';
+      case ActuatorType.HEATER:
+        return 'red';
+      case ActuatorType.COOLER:
+        return 'cyan';
+      case ActuatorType.VALVE:
+      case ActuatorType.PUMP:
+        return 'orange';
+      case ActuatorType.DISPLAY:
+        return 'teal';
+      case ActuatorType.BUZZER:
+        return 'pink';
+      default:
+        return 'gray';
+    }
+  };
 
-const getTypeIcon = (type: string) => {
-  switch (type) {
-    case 'light':
-      return Lightbulb;
-    case 'fan':
-      return Fan;
-    case 'lock':
-      return Lock;
-    case 'speaker':
-      return Volume2;
-    case 'thermostat':
-      return Settings;
-    case 'blind':
-      return Sun;
+  return (
+    <Box
+      p={2}
+      bg={`${getColor()}.100`}
+      color={`${getColor()}.600`}
+      borderRadius="lg"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+    >
+      {getIcon()}
+    </Box>
+  );
+};
+
+// Composant pour l'indicateur de tendance
+const TrendIndicator: React.FC<{ trend: 'up' | 'down' | 'stable'; value: number }> = ({ trend, value }) => {
+  const getTrendIcon = () => {
+    switch (trend) {
+      case 'up':
+        return <TrendingUp size={14} color="green" />;
+      case 'down':
+        return <TrendingDown size={14} color="red" />;
+      default:
+        return <Minus size={14} color="gray" />;
+    }
+  };
+
+  const getTrendColor = () => {
+    switch (trend) {
+      case 'up':
+        return 'green.500';
+      case 'down':
+        return 'red.500';
+      default:
+        return 'gray.500';
+    }
+  };
+
+  return (
+    <HStack gap={1}>
+      {getTrendIcon()}
+      <Text fontSize="xs" color={getTrendColor()} fontWeight="medium">
+        {value > 0 ? '+' : ''}{value.toFixed(1)}%
+      </Text>
+    </HStack>
+  );
+};
+
+// Composant pour l'indicateur de statut
+const StatusIndicator: React.FC<{ status: ConnStatus }> = ({ status }) => {
+  const getStatusColor = () => {
+    switch (status) {
+      case ConnStatus.ONLINE:
+        return 'green';
+      case ConnStatus.OFFLINE:
+        return 'red';
+      case ConnStatus.CONNECTING:
+        return 'yellow';
+      case ConnStatus.ERROR:
+        return 'red';
+      default:
+        return 'gray';
+    }
+  };
+
+  const getStatusIcon = () => {
+    switch (status) {
+      case ConnStatus.ONLINE:
+        return <Wifi size={16} />;
+      case ConnStatus.OFFLINE:
+        return <WifiOff size={16} />;
+      case ConnStatus.CONNECTING:
+        return <Activity size={16} />;
+      case ConnStatus.ERROR:
+        return <AlertTriangle size={16} />;
+      default:
+        return <Info size={16} />;
+    }
+  };
+
+  return (
+    <HStack gap={1}>
+      {getStatusIcon()}
+      <Badge colorPalette={getStatusColor()} size="sm" variant="subtle">
+        {status}
+      </Badge>
+    </HStack>
+  );
+};
+
+// Composant pour l'indicateur d'état
+const StateIndicator: React.FC<{ state: ActuatorState }> = ({ state }) => {
+  const getStateColor = () => {
+    switch (state) {
+      case ActuatorState.ON:
+      case ActuatorState.OPEN:
+      case ActuatorState.RUNNING:
+      case ActuatorState.HEATING:
+      case ActuatorState.COOLING:
+        return 'green';
+      case ActuatorState.OFF:
+      case ActuatorState.CLOSED:
+      case ActuatorState.STOPPED:
+        return 'red';
+      case ActuatorState.POSITION_0:
+      case ActuatorState.POSITION_25:
+      case ActuatorState.POSITION_50:
+      case ActuatorState.POSITION_75:
+      case ActuatorState.POSITION_100:
+        return 'blue';
+      default:
+        return 'gray';
+    }
+  };
+
+  const getStateIcon = () => {
+    switch (state) {
+      case ActuatorState.ON:
+      case ActuatorState.OPEN:
+      case ActuatorState.RUNNING:
+        return <Play size={16} />;
+      case ActuatorState.OFF:
+      case ActuatorState.CLOSED:
+      case ActuatorState.STOPPED:
+        return <Pause size={16} />;
+      case ActuatorState.HEATING:
+      case ActuatorState.COOLING:
+        return <Activity size={16} />;
+      default:
+        return <Target size={16} />;
+    }
+  };
+
+  return (
+    <HStack gap={1}>
+      {getStateIcon()}
+      <Badge colorPalette={getStateColor()} size="sm" variant="subtle">
+        {state}
+      </Badge>
+    </HStack>
+  );
+};
+
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case 'online':
+      return CheckCircle;
+    case 'offline':
+      return WifiOff;
+    case 'error':
+      return AlertTriangle;
+    case 'connecting':
+      return Activity;
     default:
-      return Zap;
+      return Info;
   }
 };
 
@@ -211,425 +302,595 @@ const getStatusColor = (status: string) => {
       return 'green';
     case 'offline':
       return 'red';
-    case 'error':
-      return 'orange';
-    default:
-      return 'gray';
-  }
-};
-
-const getPowerIcon = (powerState: string) => {
-  switch (powerState) {
-    case 'on':
-      return Power;
-    case 'off':
-      return PowerOff;
-    case 'standby':
-      return Pause;
-    default:
-      return PowerOff;
-  }
-};
-
-const getPowerColor = (powerState: string) => {
-  switch (powerState) {
-    case 'on':
-      return 'green';
-    case 'off':
-      return 'red';
-    case 'standby':
+    case 'connecting':
       return 'yellow';
+    case 'error':
+      return 'red';
     default:
       return 'gray';
   }
 };
 
 export const ActuatorControlPage: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [actuators, setActuators] = useState<Actuator[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const { open: isOpen, onOpen, onClose } = useDisclosure();
-  const [selectedActuator, setSelectedActuator] = useState<Actuator | null>(null);
-  const [controlValue, setControlValue] = useState<number[]>([0]);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isEditing, setIsEditing] = useState(false);
+  const [controlValue, setControlValue] = useState(50);
+  const [command, setCommand] = useState('');
+  const [parameters, setParameters] = useState('');
+  const [isControlModalOpen, setIsControlModalOpen] = useState(false);
+  const [selectedActuator, setSelectedActuator] = useState<any>(null);
 
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const {
+    commands,
+    isLoading: commandsLoading,
+    error: commandsError,
+    fetchCommands,
+    clearError
+  } = useActuatorStore();
 
-  useEffect(() => {
-    // Simulate API call
-    const loadActuators = async () => {
-      setIsLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setActuators(mockActuators);
-      setIsLoading(false);
-    };
+  const [deployment, setDeployment] = useState<ActuatorDeployment | null>(null);
 
-    loadActuators();
-  }, []);
+  const [deploymentError, setDeploymentError] = useState<string | null>(null);
 
-  const handleControl = (actuatorId: string, command: string, value?: number) => {
-    // Send control command
-    console.log(`Sending command to ${actuatorId}: ${command}${value ? ` with value ${value}` : ''}`);
-    
-    // Update local state
-    setActuators(prev => prev.map(actuator => {
-      if (actuator.id === actuatorId) {
-        return {
-          ...actuator,
-          powerState: command === 'turnOn' ? 'on' : command === 'turnOff' ? 'off' : actuator.powerState,
-          currentValue: value !== undefined ? value : actuator.currentValue,
-          targetValue: value !== undefined ? value : actuator.targetValue,
-          lastCommand: command,
-          lastUpdated: 'Just now',
-        };
-      }
-      return actuator;
-    }));
-  };
+  const [deploymentLoading, setDeploymentLoading] = useState<boolean>(false);
 
-  const handleOpenControl = (actuator: Actuator) => {
-    setSelectedActuator(actuator);
-    setControlValue([actuator.currentValue]);
-    onOpen();
-  };
+  const [state, setState] = useState<string | null>(null);
 
-  const handleSaveControl = () => {
-    if (selectedActuator) {
-      handleControl(selectedActuator.id, `Set ${selectedActuator.type} to ${controlValue[0]}${selectedActuator.unit}`, controlValue[0]);
-      onClose();
+  const isLoading = commandsLoading || deploymentLoading;
+
+  const error = commandsError || deploymentError;
+
+  const fetchDeploymentDetails = async (deploymentId: number) => {
+    try {
+      setDeploymentLoading(true);
+      const response = await componentApi.getDeploymentDetails(deploymentId);
+      setDeployment(response);
+      setDeploymentLoading(false);
+      setState(getCurrentStateName(response, true));
+    } catch (error) {
+      setDeploymentError(getErrorMessage(error as AxiosError));
+      console.error('Failed to fetch deployment details:', error);
+    } finally {
+      setDeploymentLoading(false);
     }
   };
 
-  const stats = {
-    total: actuators.length,
-    online: actuators.filter(a => a.status === 'online').length,
-    offline: actuators.filter(a => a.status === 'offline').length,
-    error: actuators.filter(a => a.status === 'error').length,
+  useEffect(() => {
+    if (id) {
+      fetchDeploymentDetails(Number(id));
+      fetchCommands({ deploymentId: Number(id) });
+    }
+  }, [id, fetchCommands]);
+
+
+  const fetchActuatorCommands = async (deploymentId: number, params = {}) => {
+    try {
+      await fetchCommands({ deploymentId, ...params });
+    } catch (error) {
+      console.error('Failed to fetch commands:', error);
+    }
   };
 
-  if (isLoading) {
+  const getCurrentStateName = (deployment: ActuatorDeployment, min: boolean = false): string => {
+    const value = deployment.lastValue || 0;
+    const identifier = deployment.componentType.identifier;
+    if (identifier === 'gate_servo') {
+      if (value === 0) return min ? "closed" : "Closed";
+      if (value === 180) return min ? "open" : "Open";
+    }else{
+      if (value === 0) return min ? "off" : "Off";
+      if (value > 0) return min ? "on" : "On";
+    }
+    return min ? "off" : "Unknown";
+  };
+
+  const handleRefresh = () => {
+    if (id) {
+      fetchDeploymentDetails(Number(id));
+      fetchCommands({ deploymentId: Number(id) });
+    }
+  };
+
+  const handleEdit = () => {
+    setIsEditing(!isEditing);
+  };
+
+  const handleSave = () => {
+    // Mock save - in real app, this would call API
+    setIsEditing(false);
+  };
+
+  const handleDelete = () => {
+    // Mock delete - in real app, this would call API
+    navigate('/actuators');
+  };
+
+  const handleExport = () => {
+    // Mock export - in real app, this would generate and download data
+    console.log('Exporting actuator data...');
+  };
+
+  const handleSendCommand = async (incomingCommand?: string) => {
+    const localCommand = incomingCommand || command;
+    if (!id || !localCommand.trim()) return;
+
+    try {
+      const params = parameters ? JSON.parse(parameters) : {};
+      await actuatorApi.sendCommand(Number(id), { command: localCommand, parameters: params });
+      setCommand('');
+      setParameters('');
+      setIsControlModalOpen(false);
+      setState(localCommand);
+    } catch (error) {
+      console.error('Failed to send command:', error);
+    }
+  };
+
+  const handleServoCommand = (selectedActuator: ActuatorDeployment, incomingCommand?: string) => {
+    const identifier = selectedActuator.componentType.identifier;
+    if(identifier === 'gate_servo') {
+      if(incomingCommand === 'on'){
+        handleSendCommand('180');
+      }else if(incomingCommand === 'off'){
+        handleSendCommand('0');
+      }
+    }else{
+      handleSendCommand(incomingCommand);
+    }
+  }
+
+  const handleToggle = (selectedActuator: ActuatorDeployment) => {
+    if (state === 'on') {
+      handleServoCommand(selectedActuator, 'off');
+    } else {
+      handleServoCommand(selectedActuator, 'on');
+    }
+  };
+
+  const handleOpenControl = (actuator: any) => {
+    setSelectedActuator(actuator);
+    setIsControlModalOpen(true);
+  };
+
+  const handleSaveControl = () => {
+    // Mock save control - in real app, this would call API
+    setIsControlModalOpen(false);
+  };
+
+
+  useEffect(() => {
+    if (deployment) {
+      setState(getCurrentStateName(deployment, true));
+    }
+  }, [deployment]);
+
+
+  if(deploymentLoading){
     return (
-      <Container maxW="container.xl" py={8}>
-        <VStack gap={8} align="stretch">
-          <Box textAlign="center" py={12}>
-            <Icon as={RefreshCw} boxSize={12} color="gray.400" mb={4} />
-            <Text fontSize="lg" color="gray.500">Loading actuators...</Text>
-          </Box>
-        </VStack>
+      <Container maxW="container.xl" py={6} w="100%" alignItems="center" justifyContent="center">
+        <Flex p={6} gap={2}>
+          <Spinner />
+          <Text>Loading actuator details...</Text>
+        </Flex>
       </Container>
     );
   }
 
+
+  if (!deployment) {
+    return (
+      <Box p={6}>
+        <AlertRoot status="error">
+          <AlertTitle>Actuator Not Found</AlertTitle>
+          <AlertDescription>The requested actuator could not be found.</AlertDescription>
+        </AlertRoot>
+        <Button mt={4} onClick={() => navigate('/actuators')}>
+          Back to Actuators
+        </Button>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box p={6}>
+        <AlertRoot status="error">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </AlertRoot>
+        <Button mt={4} onClick={clearError}>
+          Try Again
+        </Button>
+      </Box>
+    );
+  }
+
   return (
-    <Container maxW="container.xl" py={8}>
-      <VStack gap={8} align="stretch">
-        {/* Header */}
-        <HStack justify="space-between" align="start">
-          <Box>
-            <HStack mb={2}>
-              <IconButton
-                aria-label="Go back"
-                icon={<Icon as={Settings} />}
-                variant="ghost"
-                onClick={() => navigate('/actuators')}
-              />
-              <Heading size="lg">Actuator Control</Heading>
-            </HStack>
-            <Text color="gray.600" fontSize="lg">
-              Control and monitor your IoT actuators in real-time
-            </Text>
-          </Box>
-          
-          <Button
-            leftIcon={<Icon as={RefreshCw} />}
-            variant="outline"
-            onClick={() => window.location.reload()}
-          >
-            Refresh
-          </Button>
+    <Container maxW="container.xl" py={6}>
+      {/* Header */}
+      <VStack align="start" gap={4} mb={8}>
+        <HStack justify="space-between" w="full">
+          <HStack gap={4}>
+            <IconButton
+              aria-label="Back"
+              onClick={() => navigate('/actuators')}
+              variant="outline"
+            >
+              <ArrowLeft size={20} />
+            </IconButton>
+            <VStack align="start" gap={1}>
+              <HStack gap={3}>
+                <ActuatorIcon type={deployment.componentType?.identifier as ActuatorType} />
+                <VStack align="start" gap={0}>
+                  <Heading size="lg" color="gray.800">
+                    {deployment.componentType?.name}
+                  </Heading>
+                  <Text color="gray.600">
+                    {deployment.location || deployment.device?.identifier}
+                  </Text>
+                </VStack>
+              </HStack>
+            </VStack>
+          </HStack>
+          <HStack gap={2}>
+            <IconButton
+              aria-label="Refresh"
+              onClick={handleRefresh}
+              loading={isLoading}
+              variant="outline"
+            >
+              <RefreshCw size={20} />
+            </IconButton>
+            <Menu.Root>
+              <Menu.Trigger>
+                <IconButton
+                  aria-label="More"
+                  variant="outline"
+                >
+                  <MoreVertical size={20} />
+                </IconButton>
+              </Menu.Trigger>
+              <Portal>
+                <Menu.Content>
+                  <Menu.Item value="edit" onClick={handleEdit}>
+                    <Edit size={16} />Edit
+                  </Menu.Item>
+                  <Menu.Item value="export" onClick={handleExport}>
+                    <Download size={16} />Export Data
+                  </Menu.Item>
+                  <Menu.Item value="delete" onClick={handleDelete} color="red.500">
+                    <Trash2 size={16} />Delete
+                  </Menu.Item>
+                </Menu.Content>
+              </Portal>
+            </Menu.Root>
+          </HStack>
         </HStack>
 
-        {/* Stats */}
-        <SimpleGrid columns={{ base: 2, md: 4 }} gap={6}>
-          <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
-            <Card.Body>
-              <VStack gap={2}>
-                <Icon as={Zap} color="blue.500" boxSize={6} />
-                <Text fontSize="2xl" fontWeight="bold">{stats.total}</Text>
-                <Text fontSize="sm" color="gray.600">Total Actuators</Text>
-              </VStack>
-            </Card.Body>
-          </Card.Root>
-          
-          <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
-            <Card.Body>
-              <VStack gap={2}>
-                <Icon as={CheckCircle} color="green.500" boxSize={6} />
-                <Text fontSize="2xl" fontWeight="bold" color="green.500">{stats.online}</Text>
-                <Text fontSize="sm" color="gray.600">Online</Text>
-              </VStack>
-            </Card.Body>
-          </Card.Root>
-          
-          <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
-            <Card.Body>
-              <VStack gap={2}>
-                <Icon as={WifiOff} color="red.500" boxSize={6} />
-                <Text fontSize="2xl" fontWeight="bold" color="red.500">{stats.offline}</Text>
-                <Text fontSize="sm" color="gray.600">Offline</Text>
-              </VStack>
-            </Card.Body>
-          </Card.Root>
-          
-          <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
-            <Card.Body>
-              <VStack gap={2}>
-                <Icon as={AlertTriangle} color="orange.500" boxSize={6} />
-                <Text fontSize="2xl" fontWeight="bold" color="orange.500">{stats.error}</Text>
-                <Text fontSize="sm" color="gray.600">Errors</Text>
-              </VStack>
-            </Card.Body>
-          </Card.Root>
-        </SimpleGrid>
+        {/* Status Indicators */}
+        <HStack gap={6} w="full">
+          <StatusIndicator status={deployment.connectionStatus && deployment.active ? ConnStatus.ONLINE : ConnStatus.OFFLINE} />
+          <StateIndicator state={getCurrentStateName(deployment, true)} />
+        </HStack>
+      </VStack>
 
-        {/* Actuators Grid */}
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={6}>
-          {actuators.map((actuator) => (
-            <Card.Root key={actuator.id} bg={cardBg} borderWidth="1px" borderColor={borderColor}>
-              <Card.Header pb={2}>
-                <Flex justify="space-between" align="start">
-                  <VStack align="start" gap={1}>
-                    <HStack>
-                      <Icon as={getTypeIcon(actuator.type)} color="blue.500" />
-                      <Heading size="md">{actuator.name}</Heading>
-                    </HStack>
-                    <HStack gap={2}>
-                      <Badge colorPalette={getStatusColor(actuator.status)} variant="subtle">
-                        {actuator.status}
-                      </Badge>
-                      <Badge colorPalette={getPowerColor(actuator.powerState)} variant="outline">
-                        {actuator.powerState}
-                      </Badge>
-                    </HStack>
-                  </VStack>
-                  <Menu.Root>
-                    <Menu.Trigger asChild>
-                      <IconButton 
-                        icon={<MoreVertical />} 
-                        variant="ghost" 
-                        size="sm"
-                        aria-label="More options"
-                      />
-                    </Menu.Trigger>
-                    <Portal>
-                      <Menu.Positioner>
-                        <Menu.Content>
-                          <Menu.Item value="control" onClick={() => handleOpenControl(actuator)}>
-                            <Eye />
-                            <Box flex="1">Control</Box>
-                          </Menu.Item>
-                          <Menu.Item value="schedule">
-                            <Clock />
-                            <Box flex="1">Schedule</Box>
-                          </Menu.Item>
-                          <Menu.Item value="settings">
-                            <Edit />
-                            <Box flex="1">Settings</Box>
-                          </Menu.Item>
-                        </Menu.Content>
-                      </Menu.Positioner>
-                    </Portal>
-                  </Menu.Root>
-                </Flex>
-              </Card.Header>
-              
-              <Card.Body pt={0}>
-                <VStack align="stretch" gap={4}>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" color="gray.600">Current Value</Text>
-                    <Text fontSize="lg" fontWeight="bold" color="blue.500">
-                      {actuator.currentValue} {actuator.unit}
-                    </Text>
+      {/* Main Content */}
+      <Tabs.Root value={activeTab} onValueChange={(e) => setActiveTab(e.value)}>
+        <Tabs.List>
+          <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
+          <Tabs.Trigger value="control">Control</Tabs.Trigger>
+          <Tabs.Trigger value="commands">Commands</Tabs.Trigger>
+          <Tabs.Trigger value="settings">Settings</Tabs.Trigger>
+        </Tabs.List>
+        {/* Overview Tab */}
+        <Tabs.Content value="overview">
+          <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={6} w="full">
+            <Card.Root p={6}>
+              <Card.Body>
+                <VStack align="start" gap={4}>
+                  <HStack gap={2}>
+                    <Icon as={MapPin} color="gray.500" />
+                    <Text fontWeight="semibold">Location</Text>
                   </HStack>
-                  
-                  <Box>
-                    <HStack justify="space-between" mb={2}>
-                      <Text fontSize="sm" color="gray.600">Control</Text>
-                      <Text fontSize="sm" color="gray.500">
-                        {actuator.minValue} - {actuator.maxValue} {actuator.unit}
-                      </Text>
-                    </HStack>
-                    <Slider.Root
-                      value={[actuator.currentValue]}
-                      min={actuator.minValue}
-                      max={actuator.maxValue}
-                      step={actuator.type === 'light' || actuator.type === 'fan' ? 1 : 0.5}
-                      onValueChange={(e) => handleControl(actuator.id, `Set ${actuator.type} to ${e.value[0] || 0}${actuator.unit}`, e.value[0] || 0)}
-                      disabled={actuator.status !== 'online'}
-                    >
-                      <Slider.Control>
-                        <Box bg="gray.200" h="2px" borderRadius="full" />
-                      </Slider.Control>
-                      <Slider.Thumb index={0} />
-                    </Slider.Root>
-                  </Box>
-                  
-                  <HStack justify="space-between">
-                    <Button
-                      size="sm"
-                      leftIcon={<Icon as={getPowerIcon(actuator.powerState === 'on' ? 'off' : 'on')} />}
-                      colorPalette={actuator.powerState === 'on' ? 'red' : 'green'}
-                      variant="outline"
-                      onClick={() => handleControl(actuator.id, actuator.powerState === 'on' ? 'turnOff' : 'turnOn')}
-                      disabled={actuator.status !== 'online'}
-                    >
-                      {actuator.powerState === 'on' ? 'Turn Off' : 'Turn On'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleOpenControl(actuator)}
-                      disabled={actuator.status !== 'online'}
-                    >
-                      Advanced
-                    </Button>
-                  </HStack>
-                  
-                  <Separator />
-                  
-                  <VStack align="start" gap={2}>
-                    <HStack justify="space-between" w="full">
-                      <HStack>
-                        <Icon as={Battery} color="green.500" boxSize={4} />
-                        <Text fontSize="sm">Battery</Text>
-                      </HStack>
-                      <Text fontSize="sm">{actuator.batteryLevel}%</Text>
-                    </HStack>
-                    <HStack justify="space-between" w="full">
-                      <HStack>
-                        <Icon as={Signal} color="blue.500" boxSize={4} />
-                        <Text fontSize="sm">Signal</Text>
-                      </HStack>
-                      <Text fontSize="sm">{actuator.signalStrength}%</Text>
-                    </HStack>
-                    <HStack justify="space-between" w="full">
-                      <HStack>
-                        <Icon as={MapPin} color="gray.500" boxSize={4} />
-                        <Text fontSize="sm">Location</Text>
-                      </HStack>
-                      <Text fontSize="sm">{actuator.location}</Text>
-                    </HStack>
-                  </VStack>
-                  
-                  <Text fontSize="xs" color="gray.500">
-                    Last command: {actuator.lastCommand}
+                  <Text color="gray.600">
+                    {deployment.location || deployment.device?.identifier || 'Unknown'}
                   </Text>
                 </VStack>
               </Card.Body>
             </Card.Root>
-          ))}
-        </SimpleGrid>
 
-        {actuators.length === 0 && (
-          <Box textAlign="center" py={12}>
-            <Icon as={Zap} size="lg" color="gray.400" mb={4} />
-            <Text fontSize="lg" color="gray.500">
-              No actuators found
-            </Text>
-          </Box>
-        )}
-      </VStack>
+            <Card.Root p={6}>
+              <Card.Body>
+                <VStack align="start" gap={4}>
+                  <HStack gap={2}>
+                    <Icon as={Settings} color="gray.500" />
+                    <Text fontWeight="semibold">Type</Text>
+                  </HStack>
+                  <Text color="gray.600">
+                    {deployment.componentType?.name || 'Unknown Type'}
+                  </Text>
+                </VStack>
+              </Card.Body>
+            </Card.Root>
 
-      {/* Control Dialog */}
-      <Dialog.Root open={isOpen} onOpenChange={onClose} size="lg">
-        <DialogContent>
-          <DialogHeader>
-            <HStack justify="space-between" w="full">
-              <Text>{selectedActuator && `Control ${selectedActuator.name}`}</Text>
-              <IconButton
-                aria-label="Close"
-                icon={<X />}
-                variant="ghost"
-                size="sm"
-                onClick={onClose}
-              />
-            </HStack>
-          </DialogHeader>
-          <DialogBody pb={6}>
-            {selectedActuator && (
-              <VStack gap={6} align="stretch">
-                <HStack justify="space-between">
-                  <VStack align="start" gap={1}>
-                    <HStack>
-                      <Icon as={getTypeIcon(selectedActuator.type)} color="blue.500" />
-                      <Heading size="md">{selectedActuator.name}</Heading>
-                    </HStack>
-                    <HStack gap={2}>
-                      <Badge colorPalette={getStatusColor(selectedActuator.status)} variant="subtle">
-                        {selectedActuator.status}
-                      </Badge>
-                      <Badge colorPalette={getPowerColor(selectedActuator.powerState)} variant="outline">
-                        {selectedActuator.powerState}
-                      </Badge>
+            <Card.Root p={6}>
+              <Card.Body>
+                <VStack align="start" gap={4}>
+                  <HStack gap={2}>
+                    <Icon as={Wifi} color="gray.500" />
+                    <Text fontWeight="semibold">Device Status</Text>
+                  </HStack>
+                  <StatusIndicator status={deployment.connectionStatus as ConnStatus} />
+                </VStack>
+              </Card.Body>
+            </Card.Root>
+
+            <Card.Root p={6}>
+              <Card.Body>
+                <VStack align="start" gap={4}>
+                  <HStack gap={2}>
+                    <Icon as={Zap} color="gray.500" />
+                    <Text fontWeight="semibold">Current State</Text>
+                  </HStack>
+                  <StateIndicator state={state} />
+                </VStack>
+              </Card.Body>
+            </Card.Root>
+
+            <Card.Root p={6}>
+              <Card.Body>
+                <VStack align="start" gap={4}>
+                  <HStack gap={2}>
+                    <Icon as={Clock} color="gray.500" />
+                    <Text fontWeight="semibold">Last Updated</Text>
+                  </HStack>
+                  <Text color="gray.600">
+                    {deployment.updatedAt ? new Date(deployment.updatedAt).toLocaleString() : 'Unknown'}
+                  </Text>
+                </VStack>
+              </Card.Body>
+            </Card.Root>
+
+            <Card.Root p={6}>
+              <Card.Body>
+                <VStack align="start" gap={4}>
+                  <HStack gap={2}>
+                    <Icon as={Activity} color="gray.500" />
+                    <Text fontWeight="semibold">Total Commands</Text>
+                  </HStack>
+                  <Text color="gray.600" fontSize="2xl" fontWeight="bold">
+                    {commands.length}
+                  </Text>
+                </VStack>
+              </Card.Body>
+            </Card.Root>
+          </SimpleGrid>
+        </Tabs.Content>
+
+        {/* Control Tab */}
+        <Tabs.Content value="control">
+          <VStack align="start" gap={6} w="full">
+            <Card.Root p={6} w="full">
+              <Card.Body>
+                <VStack align="start" gap={4}>
+                  <Heading size="md">Quick Control</Heading>
+
+                  <HStack gap={4} w="full">
+                    <Button
+                      colorPalette="green"
+                      onClick={() => handleServoCommand(deployment, 'on')}
+                      disabled={state === 'on' || state === 'open'}
+                    >
+                      <Play size={16} />Turn On
+                    </Button>
+                    <Button
+                      colorPalette="red"
+                      onClick={() => handleServoCommand(deployment, 'off')}
+                      disabled={state === 'off' || state === 'closed'}
+                    >
+                      <Pause size={16} />Turn Off
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleToggle(deployment)}
+                    >
+                      <RefreshCw size={16} />Toggle
+                    </Button>
+                  </HStack>
+
+                  <Separator />
+
+                  <VStack align="start" gap={4} w="full">
+                    <Text fontWeight="semibold">Custom Command</Text>
+                    <HStack gap={4} w="full">
+                      <Input
+                        placeholder="Enter command (e.g., 'set_brightness', 'set_speed')"
+                        value={command}
+                        onChange={(e) => setCommand(e.target.value)}
+                        flex={1}
+                      />
+                      <Input
+                        placeholder="Parameters (JSON)"
+                        value={parameters}
+                        onChange={(e) => setParameters(e.target.value)}
+                        flex={1}
+                      />
+                      <Button
+                        onClick={() => handleSendCommand()}
+                        disabled={!command.trim()}
+                      >
+                        <Zap size={16} />Send
+                      </Button>
                     </HStack>
                   </VStack>
-                </HStack>
+                </VStack>
+              </Card.Body>
+            </Card.Root>
+          </VStack>
+        </Tabs.Content>
 
-                <Separator />
+        {/* Commands Tab */}
+        <Tabs.Content value="commands">
+          <VStack align="start" gap={6} w="full">
+            <Card.Root p={6} w="full">
+              <Card.Body>
+                <VStack align="start" gap={4}>
+                  <Heading size="md">Command History</Heading>
 
-                <Box>
-                  <Text fontSize="sm" fontWeight="medium" mb={2}>Value Control</Text>
-                  <HStack gap={4}>
-                    <NumberInput.Root
-                      value={controlValue[0]?.toString() || '0'}
-                      onValueChange={(e) => setControlValue([Number(e.value)])}
-                      min={selectedActuator.minValue}
-                      max={selectedActuator.maxValue}
-                      step={selectedActuator.type === 'light' || selectedActuator.type === 'fan' ? 1 : 0.5}
-                    >
-                      <NumberInput.Input />
-                    </NumberInput.Root>
-                    <Text fontSize="lg" fontWeight="bold">
-                      {selectedActuator.unit}
-                    </Text>
-                  </HStack>
-                </Box>
+                  <Table.Root>
+                    <Table.Header>
+                      <Table.Row>
+                        <Table.Cell>Command</Table.Cell>
+                        <Table.Cell>Parameters</Table.Cell>
+                        <Table.Cell>Status</Table.Cell>
+                        <Table.Cell>Executed At</Table.Cell>
+                      </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                      {commands.map((cmd) => (
+                        <Table.Row key={cmd.actuatorCommandId}>
+                          <Table.Cell>{cmd.command}</Table.Cell>
+                          <Table.Cell>
+                            {cmd.parameters && Object.keys(cmd.parameters).length > 0
+                              ? JSON.stringify(cmd.parameters)
+                              : '-'}
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Badge
+                              colorPalette="green"
+                              size="sm"
+                            >
+                              Completed
+                            </Badge>
+                          </Table.Cell>
+                          <Table.Cell>
+                            {cmd.timestamp
+                              ? new Date(cmd.timestamp).toLocaleString()
+                              : '-'}
+                          </Table.Cell>
+                        </Table.Row>
+                      ))}
+                    </Table.Body>
+                  </Table.Root>
+                </VStack>
+              </Card.Body>
+            </Card.Root>
+          </VStack>
+        </Tabs.Content>
 
-                <Box>
-                  <Text fontSize="sm" color="gray.600" mb={2}>Range: {selectedActuator.minValue} - {selectedActuator.maxValue} {selectedActuator.unit}</Text>
-                  <Slider.Root
-                    value={controlValue}
-                    min={selectedActuator.minValue}
-                    max={selectedActuator.maxValue}
-                    step={selectedActuator.type === 'light' || selectedActuator.type === 'fan' ? 1 : 0.5}
-                    onValueChange={(e) => setControlValue(e.value)}
-                  >
-                    <Slider.Control>
-                      <Slider.Track>
-                        <Slider.Range />
-                      </Slider.Track>
-                    </Slider.Control>
+        {/* Settings Tab */}
+        <Tabs.Content value="settings">
+          <VStack align="start" gap={6} w="full">
+            <Card.Root p={6} w="full">
+              <Card.Body>
+                <VStack align="start" gap={4}>
+                  <Heading size="md">Actuator Settings</Heading>
+
+                  <SimpleGrid columns={{ base: 1, md: 2 }} gap={6} w="full">
+                    <Field label="Name">
+                      <Input
+                        value={deployment.name}
+                        readOnly={!isEditing}
+                        onChange={(e) => {
+                          // Handle name change
+                        }}
+                      />
+                    </Field>
+
+                    <Field label="Description">
+                      <Textarea
+                        value={deployment.description || ''}
+                        readOnly={!isEditing}
+                        onChange={(e) => {
+                          // Handle description change
+                        }}
+                      />
+                    </Field>
+
+                    <Field label="Location">
+                      <Input
+                        value={deployment.location || ''}
+                        readOnly={!isEditing}
+                        onChange={(e) => {
+                          // Handle location change
+                        }}
+                      />
+                    </Field>
+
+                    <Field label="Active">
+                      <Switch.Root
+                        disabled={!isEditing}
+                        checked={deployment.active}
+                        onCheckedChange={(e) => {
+                          // Handle active change
+                        }}
+                      >
+                        <Switch.HiddenInput />
+                        <Switch.Control />
+                        <Switch.Label>Active</Switch.Label>
+                      </Switch.Root>
+                    </Field>
+                  </SimpleGrid>
+
+                  {isEditing && (
+                    <HStack gap={2}>
+                      <Button onClick={handleSave} colorPalette="blue">
+                        Save Changes
+                      </Button>
+                      <Button onClick={() => setIsEditing(false)} variant="outline">
+                        Cancel
+                      </Button>
+                    </HStack>
+                  )}
+                </VStack>
+              </Card.Body>
+            </Card.Root>
+          </VStack>
+        </Tabs.Content>
+      </Tabs.Root>
+
+      {/* Control Modal */}
+      <Dialog.Root open={isControlModalOpen} onOpenChange={(details) => setIsControlModalOpen(details.open)}>
+        <Dialog.Content>
+          <Dialog.Header>
+            <Heading size="md">Control Actuator</Heading>
+          </Dialog.Header>
+          <Dialog.Body>
+            <VStack gap={4}>
+              <Text>Control {selectedActuator?.name}</Text>
+
+              <Field label="Value">
+                <Slider.Root
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={[controlValue]}
+                  onValueChange={(e) => setControlValue(e.value[0] ?? 0)}
+                >
+                  <Slider.Control>
+                    <Slider.Track>
+                      <Slider.Range />
+                    </Slider.Track>
                     <Slider.Thumbs />
-                  </Slider.Root>
-                </Box>
+                  </Slider.Control>
+                </Slider.Root>
+                <Text>{controlValue}%</Text>
+              </Field>
 
-                <Separator />
-
-                <HStack gap={4} justify="flex-end">
-                  <Button variant="outline" onClick={onClose}>
-                    Cancel
-                  </Button>
-                  <Button colorPalette="blue" onClick={handleSaveControl}>
-                    Apply
-                  </Button>
-                </HStack>
-              </VStack>
-            )}
-          </DialogBody>
-        </DialogContent>
+              <HStack gap={2}>
+                <Button onClick={handleSaveControl} colorPalette="blue">
+                  Apply
+                </Button>
+                <Button onClick={() => setIsControlModalOpen(false)} variant="outline">
+                  Cancel
+                </Button>
+              </HStack>
+            </VStack>
+          </Dialog.Body>
+        </Dialog.Content>
       </Dialog.Root>
-    </Container>
+    </Container >
   );
-};
-
-export default ActuatorControlPage; 
+}; 

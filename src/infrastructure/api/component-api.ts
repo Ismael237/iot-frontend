@@ -30,6 +30,7 @@ export interface DeploymentsResponse {
 }
 
 export interface ComponentApi {
+  getDeploymentDetails: (id: number) => Promise<ComponentDeployment>;
   getComponentTypes: (params?: { category?: 'sensor' | 'actuator'; search?: string }) => Promise<ComponentTypesResponse>;
   createComponentType: (typeData: CreateComponentTypeRequest) => Promise<ComponentType>;
   getDeployments: (params?: { deviceId?: number; componentTypeId?: number; activeOnly?: boolean }) => Promise<DeploymentsResponse>;
@@ -39,6 +40,10 @@ export interface ComponentApi {
 }
 
 export const componentApi: ComponentApi = {
+  getDeploymentDetails: async (id: number) => {
+    const response = await apiClient.get(`/components/deployments/${id}`);
+    return response;
+  },
   getComponentTypes: async (params = {}) => {
     const { category, search } = params;
     const queryParams = new URLSearchParams();

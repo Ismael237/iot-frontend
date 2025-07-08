@@ -1,5 +1,136 @@
-import { ComponentType as ApiComponentType, ComponentDeployment as ApiComponentDeployment, ComponentCategory, ConnStatus } from '../../shared/types/api.types';
+import { ComponentType, ComponentDeployment } from '../../shared/types/api.types';
 import { Device } from './device.entity';
+
+export interface ComponentType {
+  id: number;
+  name: string;
+  identifier: string;
+  category: ComponentCategory;
+  unit?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ComponentDeployment {
+  id: number;
+  componentTypeId: number;
+  deviceId: number;
+  name?: string;
+  description?: string;
+  location?: string;
+  unit?: string;
+  active: boolean;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  componentType?: ComponentType;
+  device?: IotDevice;
+}
+
+export interface IotDevice {
+  id: number;
+  identifier: string;
+  deviceType: DeviceTypeEnum;
+  model?: string;
+  ipAddress?: string;
+  port?: number;
+  active: boolean;
+  status: ConnStatus;
+  lastSeen?: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  componentDeployments?: ComponentDeployment[];
+}
+
+export type ComponentCategory = 'sensor' | 'actuator';
+
+export interface CreateComponentTypeRequest {
+  name: string;
+  identifier: string;
+  category: ComponentCategory;
+  unit?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface UpdateComponentTypeRequest {
+  name?: string;
+  identifier?: string;
+  category?: ComponentCategory;
+  unit?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface CreateComponentDeploymentRequest {
+  componentTypeId: number;
+  deviceId: number;
+  name?: string;
+  description?: string;
+  location?: string;
+  unit?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface UpdateComponentDeploymentRequest {
+  name?: string;
+  description?: string;
+  location?: string;
+  unit?: string;
+  active?: boolean;
+  metadata?: Record<string, any>;
+}
+
+export interface ComponentStats {
+  totalComponents: number;
+  activeComponents: number;
+  sensors: number;
+  actuators: number;
+  byCategory: {
+    sensor: number;
+    actuator: number;
+  };
+  byDevice: Record<number, number>;
+  recentDeployments: ComponentDeployment[];
+}
+
+export interface ComponentFilter {
+  category?: ComponentCategory;
+  deviceId?: number;
+  componentTypeId?: number;
+  activeOnly?: boolean;
+  searchTerm?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export enum ComponentCategoryEnum {
+  SENSOR = 'sensor',
+  ACTUATOR = 'actuator'
+}
+
+export enum DeviceTypeEnum {
+  ESP32 = 'esp32',
+  ARDUINO = 'arduino',
+  RASPBERRY_PI = 'raspberry_pi',
+  GATEWAY = 'gateway',
+  SENSOR_NODE = 'sensor_node',
+  ACTUATOR_NODE = 'actuator_node',
+  CONTROLLER = 'controller',
+  DISPLAY = 'display',
+  CUSTOM = 'custom'
+}
+
+export enum ConnStatus {
+  CONNECTED = 'connected',
+  DISCONNECTED = 'disconnected',
+  CONNECTING = 'connecting',
+  ERROR = 'error',
+  UNKNOWN = 'unknown'
+}
 
 export class ComponentType {
   public readonly id: number;

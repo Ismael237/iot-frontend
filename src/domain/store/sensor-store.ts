@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { SensorReading, SensorStats, SensorDeployment } from '../entities/sensor.entity';
+import type { SensorReading, SensorStats, SensorDeployment } from '../entities/sensor.entity';
+import { sensorApi, type SensorReadingsParams, type AggregatedReadingsParams, type SensorStatsParams, type SensorDeploymentsParams } from '../../infrastructure/api/sensor-api';
 
 interface SensorState {
   readings: SensorReading[];
@@ -12,14 +13,95 @@ interface SensorState {
   totalStats: number;
   
   // Actions
-  fetchReadings: (params?: { deploymentId?: number; skip?: number; limit?: number; startDate?: string; endDate?: string }) => Promise<void>;
+  fetchReadings: (params?: SensorReadingsParams) => Promise<void>;
   fetchLatestReadings: (params?: { deploymentId?: number }) => Promise<void>;
-  fetchAggregatedReadings: (params?: { deploymentId?: number; hours?: number; interval?: string }) => Promise<void>;
-  fetchSensorStats: (params?: { deploymentId?: number; days?: number }) => Promise<void>;
-  fetchSensorDeployments: (params?: { deviceId?: number; activeOnly?: boolean }) => Promise<void>;
+  fetchAggregatedReadings: (params?: AggregatedReadingsParams) => Promise<any>;
+  fetchSensorStats: (params?: SensorStatsParams) => Promise<void>;
+  fetchSensorDeployments: (params?: SensorDeploymentsParams) => Promise<SensorDeployment[]>;
   setSelectedDeployment: (deployment: SensorDeployment | null) => void;
   clearError: () => void;
 }
+
+// Validation utilities
+const isValidSensorDeployment = (deployment: any): deployment is SensorDeployment => {
+  return (
+    deployment &&
+    typeof deployment.deploymentId === 'number' &&
+    deployment.componentType &&
+    deployment.componentType.category === 'sensor' &&
+    deployment.device
+  );
+};
+
+const isValidSensorReading = (reading: any): reading is SensorReading => {
+  return (
+    reading &&
+    typeof reading.readingId === 'number' &&
+    typeof reading.sensorId === 'number' &&
+    typeof reading.value === 'number' &&
+    typeof reading.timestamp === 'string'
+  );
+};
+
+const sanitizeDeployment = (deployment: any): SensorDeployment => {
+  if (!isValidSensorDeployment(deployment)) {
+    throw new Error('Invalid sensor deployment data');
+  }
+
+  return {
+    deploymentId: deployment.deploymentId,
+    componentTypeId: deployment.componentTypeId,
+    deviceId: deployment.deviceId,
+    name: deployment.name || deployment.componentType?.name || 'Unknown Sensor',
+    description: deployment.description || deployment.componentType?.description || '',
+    location: deployment.location || deployment.device?.identifier || '',
+    unit: deployment.unit || deployment.componentType?.unit || '°C',
+    lastIteration: deployment.lastIteration,
+    connectionStatus: deployment.connectionStatus,
+    lastValue: deployment.lastValue,
+    lastValueTs: deployment.lastValueTs,
+    active: deployment.active ?? true,
+    createdAt: deployment.createdAt || new Date().toISOString(),
+    updatedAt: deployment.updatedAt || new Date().toISOString(),
+    componentType: {
+      id: deployment.componentType.id || 0,
+      name: deployment.componentType.name || 'Unknown Type',
+      identifier: deployment.componentType.identifier || 'unknown',
+      category: deployment.componentType.category || 'sensor',
+      unit: deployment.componentType.unit || '°C',
+      description: deployment.componentType.description || '',
+      createdAt: deployment.componentType.createdAt || new Date().toISOString(),
+      updatedAt: deployment.componentType.updatedAt || new Date().toISOString(),
+    },
+    device: {
+      id: deployment.device.id || 0,
+      identifier: deployment.device.identifier || 'unknown-device',
+      deviceType: deployment.device.deviceType || 'esp32',
+      model: deployment.device.model || 'Unknown Model',
+      ipAddress: deployment.device.ipAddress,
+      port: deployment.device.port,
+      active: deployment.device.active ?? true,
+      status: deployment.device.status || 'unknown',
+      lastSeen: deployment.device.lastSeen,
+      createdAt: deployment.device.createdAt || new Date().toISOString(),
+      updatedAt: deployment.device.updatedAt || new Date().toISOString(),
+      componentDeployments: deployment.device.componentDeployments || [],
+    },
+  };
+};
+
+const sanitizeReading = (reading: any): SensorReading => {
+  if (!isValidSensorReading(reading)) {
+    throw new Error('Invalid sensor reading data');
+  }
+
+  return {
+    readingId: reading.readingId,
+    sensorId: reading.sensorId,
+    value: reading.value,
+    timestamp: reading.timestamp,
+  };
+};
 
 export const useSensorStore = create<SensorState>((set, get) => ({
   readings: [],
@@ -34,28 +116,16 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   fetchReadings: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { deploymentId, skip = 0, limit = 100, startDate, endDate } = params;
+      const response = await sensorApi.getReadings(params);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock data
-      const mockReadings: SensorReading[] = Array.from({ length: 50 }, (_, i) => ({
-        id: i + 1,
-        sensorId: deploymentId || 1,
-        value: Math.random() * 100,
-        timestamp: new Date(Date.now() - i * 60000).toISOString(),
-        quality: ['excellent', 'good', 'fair', 'poor'][Math.floor(Math.random() * 4)] as any,
-        metadata: {
-          battery: Math.random() * 100,
-          signal: Math.random() * 100
-        }
-      }));
-      
+      // Validate and sanitize readings
+      const validReadings = response
+        .filter(isValidSensorReading)
+        .map(sanitizeReading);
+
       set({
-        readings: mockReadings,
-        totalReadings: mockReadings.length,
+        readings: validReadings,
+        totalReadings: response.total || validReadings.length,
         isLoading: false
       });
     } catch (error) {
@@ -69,29 +139,16 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   fetchLatestReadings: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { deploymentId } = params;
+      const response = await sensorApi.getLatestReadings(params);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Mock data
-      const mockLatestReadings: SensorReading[] = [
-        {
-          id: 1,
-          sensorId: deploymentId || 1,
-          value: 23.5,
-          timestamp: new Date().toISOString(),
-          quality: 'excellent',
-          metadata: {
-            battery: 85,
-            signal: 92
-          }
-        }
-      ];
-      
+      // Validate and sanitize readings
+      const validReadings = response
+        .filter(isValidSensorReading)
+        .map(sanitizeReading);
+
       set({
-        readings: mockLatestReadings,
+        readings: validReadings,
+        totalReadings: response.total || validReadings.length,
         isLoading: false
       });
     } catch (error) {
@@ -102,29 +159,15 @@ export const useSensorStore = create<SensorState>((set, get) => ({
     }
   },
 
-  fetchAggregatedReadings: async (params = {}) => {
+  fetchAggregatedReadings: async (params = { interval: 'hour' }) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { deploymentId, hours = 24, interval = 'hour' } = params;
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 400));
-      
-      // Mock aggregated data
-      const timestamps = Array.from({ length: hours }, (_, i) => 
-        new Date(Date.now() - (hours - i - 1) * 60 * 60 * 1000).toISOString()
-      );
-      
-      const values = timestamps.map(() => Math.random() * 100);
-      const avgValues = timestamps.map(() => Math.random() * 100);
-      
-      // Store aggregated data in a way that can be used by charts
+      const response = await sensorApi.getAggregatedReadings(params);
       set({
         isLoading: false
       });
       
-      return { timestamps, values, avgValues };
+      return response;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to fetch aggregated readings',
@@ -136,43 +179,22 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   fetchSensorStats: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
       const { deploymentId, days = 7 } = params;
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 400));
+      if (!deploymentId) {
+        throw new Error('Deployment ID is required for sensor stats');
+      }
       
-      // Mock stats data
-      const mockStats: SensorStats[] = [
-        {
-          sensorId: deploymentId || 1,
-          sensorName: 'Temperature Sensor',
-          sensorType: 'temperature' as any,
-          minValue: 18.5,
-          maxValue: 28.3,
-          avgValue: 23.4,
-          lastReading: 24.1,
-          lastReadingTime: new Date().toISOString(),
-          readingCount: 1008,
-          status: 'online' as any
-        },
-        {
-          sensorId: deploymentId || 2,
-          sensorName: 'Humidity Sensor',
-          sensorType: 'humidity' as any,
-          minValue: 45.2,
-          maxValue: 78.9,
-          avgValue: 62.3,
-          lastReading: 65.7,
-          lastReadingTime: new Date().toISOString(),
-          readingCount: 1008,
-          status: 'online' as any
-        }
-      ];
+      const response = await sensorApi.getSensorStats(deploymentId, { days });
       
+      // Validate stats data
+      const validStats = response.filter((stat: any) => 
+        stat && typeof stat.sensorId === 'number' && typeof stat.sensorName === 'string'
+      );
+
       set({
-        stats: mockStats,
-        totalStats: mockStats.length,
+        stats: validStats,
+        totalStats: response.total || validStats.length,
         isLoading: false
       });
     } catch (error) {
@@ -186,98 +208,19 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   fetchSensorDeployments: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { deviceId, activeOnly = true } = params;
+      const response = await sensorApi.getSensorDeployments(params);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock deployments data
-      const mockDeployments: SensorDeployment[] = [
-        {
-          id: 1,
-          componentTypeId: 1,
-          deviceId: deviceId || 1,
-          name: 'Temperature Sensor 1',
-          description: 'Main temperature sensor in zone A',
-          location: 'Zone A - Room 101',
-          unit: '°C',
-          active: true,
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-01T00:00:00Z',
-          componentType: {
-            id: 1,
-            name: 'Temperature Sensor',
-            identifier: 'TEMP_SENSOR',
-            category: 'sensor',
-            unit: '°C',
-            description: 'Digital temperature sensor with high accuracy',
-            createdAt: '2024-01-01T00:00:00Z',
-            updatedAt: '2024-01-01T00:00:00Z'
-          },
-          device: {
-            id: deviceId || 1,
-            identifier: 'SENSOR-001',
-            deviceType: 'sensor_node' as any,
-            model: 'Temperature Sensor Pro',
-            ipAddress: '192.168.1.101',
-            port: 8081,
-            active: true,
-            status: 'connected' as any,
-            lastSeen: new Date().toISOString(),
-            createdAt: '2024-01-01T00:00:00Z',
-            updatedAt: '2024-01-01T00:00:00Z',
-            componentDeployments: []
-          }
-        },
-        {
-          id: 2,
-          componentTypeId: 2,
-          deviceId: deviceId || 2,
-          name: 'Humidity Sensor 1',
-          description: 'Main humidity sensor in zone A',
-          location: 'Zone A - Room 101',
-          unit: '%',
-          active: true,
-          createdAt: '2024-01-02T00:00:00Z',
-          updatedAt: '2024-01-02T00:00:00Z',
-          componentType: {
-            id: 2,
-            name: 'Humidity Sensor',
-            identifier: 'HUMIDITY_SENSOR',
-            category: 'sensor',
-            unit: '%',
-            description: 'Relative humidity sensor',
-            createdAt: '2024-01-02T00:00:00Z',
-            updatedAt: '2024-01-02T00:00:00Z'
-          },
-          device: {
-            id: deviceId || 2,
-            identifier: 'SENSOR-002',
-            deviceType: 'sensor_node' as any,
-            model: 'Humidity Sensor Pro',
-            ipAddress: '192.168.1.102',
-            port: 8082,
-            active: true,
-            status: 'connected' as any,
-            lastSeen: new Date().toISOString(),
-            createdAt: '2024-01-02T00:00:00Z',
-            updatedAt: '2024-01-02T00:00:00Z',
-            componentDeployments: []
-          }
-        }
-      ];
+      // Validate and sanitize deployments
+      const validDeployments = response
+        .filter(isValidSensorDeployment)
+        .map(sanitizeDeployment);
 
-      let filteredDeployments = mockDeployments;
-      
-      if (activeOnly) {
-        filteredDeployments = filteredDeployments.filter(deployment => deployment.active);
-      }
       
       set({
-        deployments: filteredDeployments,
+        deployments: validDeployments,
         isLoading: false
       });
+      return validDeployments;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to fetch sensor deployments',
@@ -287,6 +230,10 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   },
 
   setSelectedDeployment: (deployment: SensorDeployment | null) => {
+    if (deployment && !isValidSensorDeployment(deployment)) {
+      console.warn('Invalid deployment data provided to setSelectedDeployment');
+      return;
+    }
     set({ selectedDeployment: deployment });
   },
 

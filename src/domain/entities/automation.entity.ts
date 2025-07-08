@@ -1,25 +1,24 @@
+import { AutomationRule, Alert } from '../../shared/types/api.types';
+
 export interface AutomationRule {
-  id: number;
+  ruleId: number;
   name: string;
   description?: string;
   sensorDeploymentId: number;
   operator: ComparisonOperator;
   thresholdValue: number;
-  actionType: ActionType;
+  actionType: AutomationActionType;
   alertTitle?: string;
   alertMessage?: string;
-  alertSeverity?: AlertSeverity;
+  alertSeverity?: string;
   targetDeploymentId?: number;
   actuatorCommand?: string;
   actuatorParameters?: Record<string, any>;
   cooldownMinutes: number;
   isActive: boolean;
   lastTriggered?: string;
-  triggerCount: number;
   createdAt: string;
   updatedAt: string;
-  sensorDeployment: ComponentDeployment;
-  targetDeployment?: ComponentDeployment;
 }
 
 export interface Alert {
@@ -27,15 +26,12 @@ export interface Alert {
   title: string;
   message: string;
   severity: AlertSeverity;
-  source: AlertSource;
-  sourceId?: number;
-  metadata?: Record<string, any>;
+  automationRuleId?: number;
   isRead: boolean;
   isAcknowledged: boolean;
-  acknowledgedAt?: string;
-  acknowledgedBy?: number;
   createdAt: string;
-  updatedAt: string;
+  readAt?: string;
+  acknowledgedAt?: string;
 }
 
 export interface ComponentDeployment {
@@ -76,57 +72,66 @@ export interface IotDevice {
   componentDeployments: ComponentDeployment[];
 }
 
-export enum ComparisonOperator {
-  EQUALS = 'equals',
-  NOT_EQUALS = 'not_equals',
-  GREATER_THAN = 'greater_than',
-  GREATER_THAN_OR_EQUAL = 'greater_than_or_equal',
-  LESS_THAN = 'less_than',
-  LESS_THAN_OR_EQUAL = 'less_than_or_equal',
-  BETWEEN = 'between',
-  NOT_BETWEEN = 'not_between',
-  CONTAINS = 'contains',
-  NOT_CONTAINS = 'not_contains',
-  STARTS_WITH = 'starts_with',
-  ENDS_WITH = 'ends_with',
-  IS_NULL = 'is_null',
-  IS_NOT_NULL = 'is_not_null'
+export type ComparisonOperator = 'gt' | 'lt' | 'gte' | 'lte' | 'eq' | 'ne';
+export type AutomationActionType = 'create_alert' | 'trigger_actuator';
+export type AlertSeverity = 'info' | 'warning' | 'error' | 'critical';
+
+export type CreateAutomationRuleRequest = Omit<AutomationRule, 'id' | 'createdAt' | 'updatedAt'>;
+export type UpdateAutomationRuleRequest = Partial<Omit<AutomationRule, 'id' | 'createdAt' | 'updatedAt'>>;
+
+export interface AutomationRuleExecution {
+  id: number;
+  ruleId: number;
+  sensorValue: number;
+  thresholdValue: number;
+  triggered: boolean;
+  actionExecuted: boolean;
+  executedAt: string;
+  result?: string;
+  error?: string;
 }
 
-export enum ActionType {
-  SEND_ALERT = 'send_alert',
-  ACTIVATE_ACTUATOR = 'activate_actuator',
-  DEACTIVATE_ACTUATOR = 'deactivate_actuator',
-  TOGGLE_ACTUATOR = 'toggle_actuator',
-  SET_ACTUATOR_VALUE = 'set_actuator_value',
-  SEND_NOTIFICATION = 'send_notification',
-  LOG_EVENT = 'log_event',
-  EXECUTE_SCRIPT = 'execute_script',
-  HTTP_REQUEST = 'http_request',
-  EMAIL = 'email',
-  SMS = 'sms',
-  WEBHOOK = 'webhook'
+export interface AutomationRuleStats {
+  ruleId: number;
+  totalExecutions: number;
+  successfulExecutions: number;
+  failedExecutions: number;
+  lastExecution?: string;
+  averageExecutionTime: number;
+  alertsGenerated: number;
+  actuatorsTriggered: number;
 }
 
-export enum AlertSeverity {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  CRITICAL = 'critical',
+export interface AutomationSystemStatus {
+  totalRules: number;
+  activeRules: number;
+  inactiveRules: number;
+  rulesExecutedToday: number;
+  alertsGeneratedToday: number;
+  actuatorsTriggeredToday: number;
+  systemHealth: 'healthy' | 'warning' | 'error';
+  lastSystemCheck: string;
+}
+
+export enum ComparisonOperatorEnum {
+  GREATER_THAN = 'gt',
+  LESS_THAN = 'lt',
+  GREATER_THAN_OR_EQUAL = 'gte',
+  LESS_THAN_OR_EQUAL = 'lte',
+  EQUAL = 'eq',
+  NOT_EQUAL = 'ne'
+}
+
+export enum AutomationActionTypeEnum {
+  CREATE_ALERT = 'create_alert',
+  TRIGGER_ACTUATOR = 'trigger_actuator'
+}
+
+export enum AlertSeverityEnum {
   INFO = 'info',
   WARNING = 'warning',
-  ERROR = 'error'
-}
-
-export enum AlertSource {
-  AUTOMATION_RULE = 'automation_rule',
-  SYSTEM_MONITOR = 'system_monitor',
-  DEVICE_ALERT = 'device_alert',
-  SENSOR_ALERT = 'sensor_alert',
-  ACTUATOR_ALERT = 'actuator_alert',
-  ZONE_ALERT = 'zone_alert',
-  MANUAL = 'manual',
-  EXTERNAL = 'external'
+  ERROR = 'error',
+  CRITICAL = 'critical'
 }
 
 export enum DeviceTypeEnum {

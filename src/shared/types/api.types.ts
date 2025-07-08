@@ -16,7 +16,7 @@ export interface PaginatedResponse<T> {
 export interface ErrorResponse {
   error: string;
   message: string;
-  status_code: number;
+  statusCode: number;
   details?: any;
 }
 
@@ -27,35 +27,26 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
+  accessToken: string;
   user: User;
 }
 
-export interface RefreshTokenRequest {
-  refresh_token: string;
-}
-
 export interface RefreshTokenResponse {
-  access_token: string;
-}
-
-export interface LogoutRequest {
-  refresh_token: string;
+  accessToken: string;
 }
 
 export interface LogoutResponse {
-  success: boolean;
+  message: string;
 }
 
 // Common Types
 export interface TimestampFields {
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreatedByFields {
-  created_by?: number;
+  createdBy?: number;
 }
 
 // User Types
@@ -64,74 +55,76 @@ export type UserRole = 'admin' | 'user';
 export interface User {
   id: number;
   email: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
   role: UserRole;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateUserRequest {
   email: string;
   password: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
   role: UserRole;
 }
 
 export interface UpdateUserRequest {
-  first_name?: string;
-  last_name?: string;
+  firstName?: string;
+  lastName?: string;
   role?: UserRole;
-  is_active?: boolean;
+  isActive?: boolean;
 }
 
 // Device Types
 export type DeviceTypeEnum = 
-  | 'arduino_uno' 
-  | 'arduino_nano' 
   | 'esp32' 
-  | 'esp8266' 
+  | 'arduino' 
   | 'raspberry_pi' 
-  | 'sensor_module' 
-  | 'actuator_module' 
-  | 'gateway';
+  | 'gateway'
+  | 'sensor_node'
+  | 'actuator_node'
+  | 'controller'
+  | 'display'
+  | 'custom';
 
-export type ConnStatus = 'unknown' | 'online' | 'offline' | 'error';
+export type ConnStatus = 'connected' | 'disconnected' | 'connecting' | 'error' | 'unknown';
 
 export interface IotDevice {
   id: number;
   identifier: string;
-  device_type: DeviceTypeEnum;
+  deviceType: DeviceTypeEnum;
   model?: string;
-  ip_address?: string;
+  ipAddress?: string;
   port?: number;
   active: boolean;
-  created_at: string;
-  updated_at: string;
+  status: ConnStatus;
+  lastSeen?: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  componentDeployments?: ComponentDeployment[];
 }
 
 export interface CreateDeviceRequest {
   identifier: string;
-  device_type: DeviceTypeEnum;
+  deviceType: DeviceTypeEnum;
   model?: string;
-  ip_address?: string;
-  port?: number;
-  active: boolean;
+  metadata?: Record<string, any>;
 }
 
 export interface UpdateDeviceRequest {
   model?: string;
-  ip_address?: string;
-  port?: number;
   active?: boolean;
+  metadata?: Record<string, any>;
 }
 
 export interface DeviceStatus {
-  device_id: number;
+  deviceId: number;
   status: ConnStatus;
-  last_seen?: string;
+  lastSeen?: string;
 }
 
 // Component Types
@@ -144,8 +137,9 @@ export interface ComponentType {
   category: ComponentCategory;
   unit?: string;
   description?: string;
-  created_at: string;
-  updated_at: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateComponentTypeRequest {
@@ -158,67 +152,92 @@ export interface CreateComponentTypeRequest {
 
 export interface ComponentDeployment {
   id: number;
-  component_type_id: number;
-  device_id: number;
+  componentTypeId: number;
+  deviceId: number;
+  name?: string;
+  description?: string;
+  location?: string;
+  unit?: string;
   active: boolean;
-  created_at: string;
-  updated_at: string;
-  component_type?: ComponentType;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  componentType?: ComponentType;
   device?: IotDevice;
 }
 
 export interface CreateComponentDeploymentRequest {
-  component_type_id: number;
-  device_id: number;
-  active: boolean;
+  componentTypeId: number;
+  deviceId: number;
+  name?: string;
+  description?: string;
+  location?: string;
+  unit?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface UpdateComponentDeploymentRequest {
+  name?: string;
+  description?: string;
+  location?: string;
+  unit?: string;
   active?: boolean;
+  metadata?: Record<string, any>;
 }
 
 // Sensor Types
+export type ReadingQuality = 'excellent' | 'good' | 'fair' | 'poor' | 'invalid';
+
 export interface SensorReading {
   id: number;
-  deployment_id: number;
+  sensorId: number;
   value: number;
   timestamp: string;
-  metadata?: object;
+  quality: ReadingQuality;
+  metadata?: Record<string, any>;
 }
 
 export interface SensorStats {
-  min: number;
-  max: number;
-  avg: number;
-  count: number;
+  sensorId: number;
+  sensorName: string;
+  sensorType: string;
+  minValue: number;
+  maxValue: number;
+  avgValue: number;
+  lastReading: number;
+  lastReadingTime: string;
+  readingCount: number;
+  status: ConnStatus;
 }
 
 export interface AggregatedSensorData {
   timestamps: string[];
   values: number[];
-  avg_values: number[];
+  avgValues: number[];
+  minValues: number[];
+  maxValues: number[];
 }
 
 // Actuator Types
 export interface ActuatorCommand {
   id: number;
-  deployment_id: number;
+  deploymentId: number;
   command: string;
-  parameters?: object;
+  parameters?: Record<string, any>;
   status: 'pending' | 'executed' | 'failed';
-  executed_at?: string;
-  created_at: string;
+  executedAt?: string;
+  createdAt: string;
 }
 
 export interface ActuatorStatus {
-  deployment_id: number;
-  connection_status: ConnStatus;
-  last_interaction?: string;
+  deploymentId: number;
+  connectionStatus: ConnStatus;
+  lastInteraction?: string;
 }
 
 export interface SendActuatorCommandRequest {
   command: string;
-  parameters?: object;
+  parameters?: Record<string, any>;
 }
 
 // Zone Types
@@ -226,95 +245,97 @@ export interface Zone {
   id: number;
   name: string;
   description?: string;
-  parent_zone_id?: number;
-  metadata?: object;
-  created_at: string;
-  updated_at: string;
-  component_deployments?: ComponentDeployment[];
-  child_zones?: Zone[];
+  parentZoneId?: number;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  componentDeployments?: ComponentDeployment[];
+  childZones?: Zone[];
 }
 
 export interface CreateZoneRequest {
   name: string;
   description?: string;
-  parent_zone_id?: number;
-  metadata?: object;
+  parentZoneId?: number;
+  metadata?: Record<string, any>;
 }
 
 export interface UpdateZoneRequest {
   name?: string;
   description?: string;
-  parent_zone_id?: number;
-  metadata?: object;
+  parentZoneId?: number;
+  metadata?: Record<string, any>;
 }
 
 // Automation Types
-export type ComparisonOperator = '>' | '<' | '>=' | '<=' | '=' | '!=';
+export type ComparisonOperator = 'gt' | 'lt' | 'gte' | 'lte' | 'eq' | 'ne';
 export type AutomationActionType = 'create_alert' | 'trigger_actuator';
 
 export interface AutomationRule {
   id: number;
   name: string;
   description?: string;
-  sensor_deployment_id: number;
+  sensorDeploymentId: number;
   operator: ComparisonOperator;
-  threshold_value: number;
-  action_type: AutomationActionType;
-  alert_title?: string;
-  alert_message?: string;
-  alert_severity?: string;
-  target_deployment_id?: number;
-  actuator_command?: string;
-  actuator_parameters?: Record<string, any>;
-  cooldown_minutes: number;
-  is_active: boolean;
-  last_triggered?: string;
-  created_at: string;
-  updated_at: string;
+  thresholdValue: number;
+  actionType: AutomationActionType;
+  alertTitle?: string;
+  alertMessage?: string;
+  alertSeverity?: string;
+  targetDeploymentId?: number;
+  actuatorCommand?: string;
+  actuatorParameters?: Record<string, any>;
+  cooldownMinutes: number;
+  isActive: boolean;
+  lastTriggered?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateAutomationRuleRequest {
   name: string;
   description?: string;
-  sensor_deployment_id: number;
+  sensorDeploymentId: number;
   operator: ComparisonOperator;
-  threshold_value: number;
-  action_type: AutomationActionType;
-  alert_title?: string;
-  alert_message?: string;
-  alert_severity?: string;
-  target_deployment_id?: number;
-  actuator_command?: string;
-  actuator_parameters?: Record<string, any>;
-  cooldown_minutes: number;
+  thresholdValue: number;
+  actionType: AutomationActionType;
+  alertTitle?: string;
+  alertMessage?: string;
+  alertSeverity?: string;
+  targetDeploymentId?: number;
+  actuatorCommand?: string;
+  actuatorParameters?: Record<string, any>;
+  cooldownMinutes: number;
 }
 
 export interface UpdateAutomationRuleRequest {
   name?: string;
   description?: string;
-  sensor_deployment_id?: number;
+  sensorDeploymentId?: number;
   operator?: ComparisonOperator;
-  threshold_value?: number;
-  action_type?: AutomationActionType;
-  alert_title?: string;
-  alert_message?: string;
-  alert_severity?: string;
-  target_deployment_id?: number;
-  actuator_command?: string;
-  actuator_parameters?: Record<string, any>;
-  cooldown_minutes?: number;
+  thresholdValue?: number;
+  actionType?: AutomationActionType;
+  alertTitle?: string;
+  alertMessage?: string;
+  alertSeverity?: string;
+  targetDeploymentId?: number;
+  actuatorCommand?: string;
+  actuatorParameters?: Record<string, any>;
+  cooldownMinutes?: number;
+  isActive?: boolean;
 }
 
-// Alert Types
 export interface Alert {
   id: number;
   title: string;
   message: string;
   severity: 'info' | 'warning' | 'error' | 'critical';
-  automation_rule_id?: number;
-  is_read: boolean;
-  created_at: string;
-  read_at?: string;
+  automationRuleId?: number;
+  isRead: boolean;
+  isAcknowledged: boolean;
+  createdAt: string;
+  readAt?: string;
+  acknowledgedAt?: string;
 }
 
 // Query Parameters
@@ -324,32 +345,34 @@ export interface PaginationParams {
 }
 
 export interface DeviceQueryParams extends PaginationParams {
-  device_type?: DeviceTypeEnum;
-  active_only?: boolean;
+  deviceType?: DeviceTypeEnum;
+  activeOnly?: boolean;
 }
 
 export interface ComponentQueryParams extends PaginationParams {
-  device_id?: number;
-  component_type_id?: number;
+  deviceId?: number;
+  componentTypeId?: number;
   category?: ComponentCategory;
-  active_only?: boolean;
+  activeOnly?: boolean;
 }
 
 export interface SensorQueryParams extends PaginationParams {
-  deployment_id?: number;
-  start_date?: string;
-  end_date?: string;
+  deploymentId?: number;
+  startDate?: string;
+  endDate?: string;
   hours?: number;
+  interval?: 'hour' | 'day' | 'week';
 }
 
 export interface ZoneQueryParams extends PaginationParams {
-  parent_zone_id?: number;
+  parentZoneId?: number;
 }
 
 export interface AutomationQueryParams extends PaginationParams {
-  is_active?: boolean;
+  isActive?: boolean;
 }
 
 export interface AlertQueryParams extends PaginationParams {
   severity?: string;
+  resolved?: boolean;
 } 

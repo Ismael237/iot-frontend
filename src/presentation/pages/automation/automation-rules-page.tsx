@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -9,19 +9,24 @@ import {
   VStack,
   Icon,
   Flex,
-  chakra,
-  NativeSelect,
   Switch,
   Menu,
   Portal,
   Badge,
   InputGroup,
   Card,
+  Button,
+  IconButton,
+  Skeleton,
+  AlertRoot,
+  AlertTitle,
+  AlertDescription,
+  useDisclosure,
+  Dialog,
+  createListCollection,
+  Select,
+  Input,
 } from '@chakra-ui/react';
-import { Button } from '@/presentation/components/ui/button';
-import { IconButton } from '@/presentation/components/ui/button';
-import { Modal } from '@/presentation/components/ui/modal';
-import { Input } from '@/presentation/components/ui/input';
 import {
   Search,
   Plus,
@@ -35,216 +40,313 @@ import {
   Play,
   Pause,
   AlertTriangle,
-  CheckCircle,
-  Settings,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Timer,
+  Gauge,
+  Activity,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAutomationStore } from '@domain/store/automation-store';
+import { type AutomationRule, type ComparisonOperator, AutomationActionTypeEnum } from '@domain/entities/automation.entity';
+import { toaster } from '@/presentation/components/ui/chakra/toaster';
 
-interface AutomationRule {
-  id: string;
-  name: string;
-  description: string;
-  trigger: {
-    type: 'sensor' | 'time' | 'manual' | 'condition';
-    sensor?: string;
-    condition?: string;
-    time?: string;
+// Composant pour l'indicateur de tendance
+const TrendIndicator: React.FC<{ trend: 'up' | 'down' | 'stable'; value: number }> = ({ trend, value }) => {
+  const getTrendIcon = () => {
+    switch (trend) {
+      case 'up':
+        return <TrendingUp size={14} color="green" />;
+      case 'down':
+        return <TrendingDown size={14} color="red" />;
+      default:
+        return <Minus size={14} color="gray" />;
+    }
   };
-  conditions: string[];
-  actions: string[];
-  status: 'active' | 'inactive' | 'error';
-  priority: 'high' | 'medium' | 'low';
-  lastExecuted?: string;
-  executionCount: number;
-  successRate: number;
-  createdAt: string;
-  tags: string[];
-}
 
-const mockRules: AutomationRule[] = [
-  {
-    id: '1',
-    name: 'Temperature Control',
-    description: 'Automatically adjust HVAC based on temperature readings',
-    trigger: {
-      type: 'sensor',
-      sensor: 'Living Room Temperature Sensor',
-      condition: 'Temperature > 25°C',
-    },
-    conditions: ['Time between 6:00 AM and 10:00 PM', 'Home occupied'],
-    actions: ['Turn on AC', 'Set temperature to 22°C', 'Send notification'],
-    status: 'active',
-    priority: 'high',
-    lastExecuted: '2 minutes ago',
-    executionCount: 45,
-    successRate: 98.5,
-    createdAt: '2024-01-10',
-    tags: ['climate', 'energy-saving'],
-  },
-  {
-    id: '2',
-    name: 'Security Mode',
-    description: 'Activate security system when no one is home',
-    trigger: {
-      type: 'condition',
-      condition: 'All occupants left home',
-    },
-    conditions: ['Time after 8:00 PM', 'Motion detected'],
-    actions: ['Lock all doors', 'Turn on security cameras', 'Activate alarm system'],
-    status: 'active',
-    priority: 'high',
-    lastExecuted: '1 hour ago',
-    executionCount: 12,
-    successRate: 100,
-    createdAt: '2024-01-08',
-    tags: ['security', 'automation'],
-  },
-  {
-    id: '3',
-    name: 'Morning Routine',
-    description: 'Gradual wake-up sequence with lights and music',
-    trigger: {
-      type: 'time',
-      time: '6:30 AM',
-    },
-    conditions: ['Weekdays only', 'Home occupied'],
-    actions: ['Gradual light increase', 'Play morning playlist', 'Start coffee maker'],
-    status: 'active',
-    priority: 'medium',
-    lastExecuted: 'Today at 6:30 AM',
-    executionCount: 28,
-    successRate: 95.2,
-    createdAt: '2024-01-05',
-    tags: ['routine', 'comfort'],
-  },
-  {
-    id: '4',
-    name: 'Energy Saving',
-    description: 'Turn off unused devices during sleep hours',
-    trigger: {
-      type: 'time',
-      time: '11:00 PM',
-    },
-    conditions: ['No motion detected for 30 minutes', 'Lights off'],
-    actions: ['Turn off entertainment devices', 'Dim hallway lights', 'Set thermostat to sleep mode'],
-    status: 'active',
-    priority: 'medium',
-    lastExecuted: 'Yesterday at 11:00 PM',
-    executionCount: 35,
-    successRate: 97.1,
-    createdAt: '2024-01-03',
-    tags: ['energy', 'sleep'],
-  },
-  {
-    id: '5',
-    name: 'Weather Response',
-    description: 'Adjust home settings based on weather conditions',
-    trigger: {
-      type: 'condition',
-      condition: 'Rain detected',
-    },
-    conditions: ['Windows open', 'Outdoor temperature < 15°C'],
-    actions: ['Close windows', 'Turn on dehumidifier', 'Adjust lighting'],
-    status: 'error',
-    priority: 'low',
-    lastExecuted: '3 hours ago',
-    executionCount: 8,
-    successRate: 75.0,
-    createdAt: '2024-01-12',
-    tags: ['weather', 'maintenance'],
-  },
-  {
-    id: '6',
-    name: 'Guest Mode',
-    description: 'Special settings for when guests are present',
-    trigger: {
-      type: 'manual',
-    },
-    conditions: ['Guest mode activated', 'Time between 6:00 PM and 12:00 AM'],
-    actions: ['Adjust lighting for ambiance', 'Play background music', 'Set comfortable temperature'],
-    status: 'inactive',
-    priority: 'low',
-    executionCount: 5,
-    successRate: 100,
-    createdAt: '2024-01-15',
-    tags: ['guest', 'entertainment'],
-  },
-];
+  const getTrendColor = () => {
+    switch (trend) {
+      case 'up':
+        return 'green.500';
+      case 'down':
+        return 'red.500';
+      default:
+        return 'gray.500';
+    }
+  };
 
-const getTriggerIcon = (type: string) => {
-  switch (type) {
-    case 'sensor':
-      return Thermometer;
-    case 'time':
-      return Clock;
-    case 'manual':
-      return Settings;
-    case 'condition':
-      return AlertTriangle;
-    default:
-      return Zap;
-  }
+  return (
+    <HStack gap={1}>
+      {getTrendIcon()}
+      <Text fontSize="xs" color={getTrendColor()} fontWeight="medium">
+        {value > 0 ? '+' : ''}{value.toFixed(1)}%
+      </Text>
+    </HStack>
+  );
 };
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'active':
-      return 'green';
-    case 'inactive':
-      return 'gray';
-    case 'error':
-      return 'red';
-    default:
-      return 'gray';
-  }
-};
+// Composant pour l'icône du type d'automation
+const AutomationIcon: React.FC<{ type: string; size?: number }> = ({ type, size = 20 }) => {
+  const getIcon = () => {
+    switch (type) {
+      case 'sensor_based':
+        return <Thermometer size={size} />;
+      case 'schedule':
+        return <Clock size={size} />;
+      case 'motion_based':
+        return <Activity size={size} />;
+      case 'time_based':
+        return <Timer size={size} />;
+      case 'threshold':
+        return <Gauge size={size} />;
+      case 'condition':
+        return <AlertTriangle size={size} />;
+      default:
+        return <Zap size={size} />;
+    }
+  };
 
-const getPriorityColor = (priority: string) => {
-  switch (priority) {
-    case 'high':
-      return 'red';
-    case 'medium':
-      return 'orange';
-    case 'low':
-      return 'green';
-    default:
-      return 'gray';
-  }
+  const getColor = () => {
+    switch (type) {
+      case 'sensor_based':
+        return 'blue';
+      case 'schedule':
+        return 'green';
+      case 'motion_based':
+        return 'orange';
+      case 'time_based':
+        return 'purple';
+      case 'threshold':
+        return 'cyan';
+      case 'condition':
+        return 'pink';
+      default:
+        return 'gray';
+    }
+  };
+
+  return (
+    <Box
+      p={2}
+      bg={`${getColor()}.100`}
+      color={`${getColor()}.600`}
+      borderRadius="lg"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+    >
+      {getIcon()}
+    </Box>
+  );
 };
 
 export const AutomationRulesPage: React.FC = () => {
+  const navigate = useNavigate();
+  const {
+    rules,
+    isLoading,
+    error,
+    fetchRules,
+    activateRule,
+    deleteRule,
+    selectedRule,
+    setSelectedRule,
+  } = useAutomationStore();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedRule, setSelectedRule] = useState<AutomationRule | null>(null);
+  const { open: isOpen, onOpen: onOpen, onClose: onClose } = useDisclosure();
+  const { open: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
+  const [ruleToDelete, setRuleToDelete] = useState<AutomationRule | null>(null);
 
-  const cardBg = 'white';
-  const borderColor = 'gray.200';
+  // Collections pour les filtres
+  const statusCollection = createListCollection({
+    items: [
+      { label: 'All Status', value: 'all' },
+      { label: 'Active', value: 'active' },
+      { label: 'Inactive', value: 'inactive' },
+    ],
+  });
 
-  const filteredRules = mockRules.filter((rule) => {
+  const priorityCollection = createListCollection({
+    items: [
+      { label: 'All Priorities', value: 'all' },
+      { label: 'High', value: 'high' },
+      { label: 'Medium', value: 'medium' },
+      { label: 'Low', value: 'low' },
+    ],
+  });
+
+  // Polling pour les règles en temps réel
+  useEffect(() => {
+    fetchRules();
+
+    // Polling toutes les 30 secondes
+    const interval = setInterval(() => {
+      fetchRules();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [fetchRules]);
+
+  // Filtrage des règles
+  const filteredRules = rules.filter((rule) => {
     const matchesSearch = rule.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rule.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || rule.status === statusFilter;
-    const matchesPriority = priorityFilter === 'all' || rule.priority === priorityFilter;
+      (rule.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = statusFilter === 'all' || 
+      (statusFilter === 'active' ? rule.isActive : !rule.isActive);
+
+    // Pour l'instant, on simule la priorité basée sur le type d'action
+    const getPriority = (rule: AutomationRule) => {
+      if (rule.actionType === AutomationActionTypeEnum.CREATE_ALERT) return 'high';
+      if (rule.actionType === AutomationActionTypeEnum.TRIGGER_ACTUATOR) return 'medium';
+      return 'low';
+    };
+
+    const matchesPriority = priorityFilter === 'all' || 
+      getPriority(rule) === priorityFilter;
+
     return matchesSearch && matchesStatus && matchesPriority;
   });
 
+  // Calcul des statistiques
   const stats = {
-    total: mockRules.length,
-    active: mockRules.filter(r => r.status === 'active').length,
-    inactive: mockRules.filter(r => r.status === 'inactive').length,
-    error: mockRules.filter(r => r.status === 'error').length,
+    total: rules.length,
+    active: rules.filter(r => r.isActive).length,
+    inactive: rules.filter(r => !r.isActive).length,
+    triggered: rules.reduce((sum, r) => sum + (r.lastTriggered ? 1 : 0), 0),
+  };
+
+  // Calcul de la tendance (simulé)
+  const calculateTrend = (): { trend: 'up' | 'down' | 'stable'; value: number } => {
+    if (rules.length < 2) return { trend: 'stable', value: 0 };
+    
+    const recent = rules.slice(-5);
+    const older = rules.slice(-10, -5);
+    
+    if (older.length === 0) return { trend: 'stable', value: 0 };
+    
+    const recentActive = recent.filter(r => r.isActive).length;
+    const olderActive = older.filter(r => r.isActive).length;
+    
+    const change = ((recentActive - olderActive) / olderActive) * 100;
+    
+    if (Math.abs(change) < 5) return { trend: 'stable', value: 0 };
+    return { trend: change > 0 ? 'up' : 'down', value: Math.abs(change) };
+  };
+
+  const getStatusColor = (isActive: boolean) => {
+    return isActive ? 'green' : 'red';
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return 'red';
+      case 'medium':
+        return 'orange';
+      case 'low':
+        return 'green';
+      default:
+        return 'gray';
+    }
+  };
+
+  const getPriority = (rule: AutomationRule) => {
+    if (rule.actionType === AutomationActionTypeEnum.TRIGGER_ACTUATOR) return 'high';
+    if (rule.actionType === AutomationActionTypeEnum.CREATE_ALERT) return 'medium';
+    return 'low';
   };
 
   const handleViewDetails = (rule: AutomationRule) => {
     setSelectedRule(rule);
-    setIsOpen(true);
+    onOpen();
   };
 
-  const handleToggleStatus = (ruleId: string) => {
-    // Toggle rule status logic would go here
-    console.log('Toggle status for rule:', ruleId);
+  const handleToggleStatus = async (ruleId: number, currentStatus: boolean) => {
+    try {
+      await activateRule(ruleId, !currentStatus);
+      toaster.create({
+        title: 'Rule Updated',
+        description: `Successfully ${currentStatus ? 'disabled' : 'enabled'} rule`,
+        type: 'success',
+        duration: 3000,
+        closable: true,
+      });
+    } catch (error) {
+      toaster.create({
+        title: 'Error',
+        description: 'Failed to update rule status',
+        type: 'error',
+        duration: 3000,
+        closable: true,
+      });
+    }
   };
+
+  const handleDelete = async () => {
+    if (!ruleToDelete) return;
+    
+    try {
+      await deleteRule(ruleToDelete.ruleId);
+      onDeleteClose();
+      setRuleToDelete(null);
+      toaster.create({
+        title: 'Rule Deleted',
+        description: 'Automation rule deleted successfully',
+        type: 'success',
+        duration: 3000,
+        closable: true,
+      });
+    } catch (error) {
+      toaster.create({
+        title: 'Error',
+        description: 'Failed to delete automation rule',
+        type: 'error',
+        duration: 3000,
+        closable: true,
+      });
+    }
+  };
+
+  const getTriggerDescription = (rule: AutomationRule) => {
+    const operatorMap: Record<ComparisonOperator, string> = {
+      '>': 'greater than',
+      '<': 'less than',
+      '>=': 'greater than or equal to',
+      '<=': 'less than or equal to',
+      '==': 'equal to',
+      '!=': 'not equal to',
+    };
+
+    return `${rule.operator} ${rule.thresholdValue}`;
+  };
+
+  const getActionDescription = (rule: AutomationRule) => {
+    switch (rule.actionType) {
+      case AutomationActionTypeEnum.CREATE_ALERT:
+        return `Send an alert: ${rule.alertTitle || 'Alert'}`;
+      case AutomationActionTypeEnum.TRIGGER_ACTUATOR:
+        return `Control an actuator: ${rule.actuatorCommand || 'Command'}`;
+      default:
+        return 'Custom action';
+    }
+  };
+
+  const trend = calculateTrend();
+
+  if (error) {
+    return (
+      <AlertRoot status="error" mb={4}>
+        <AlertTitle>Error loading automation rules!</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </AlertRoot>
+    );
+  }
 
   return (
     <Container maxW="container.xl" py={8}>
@@ -259,17 +361,18 @@ export const AutomationRulesPage: React.FC = () => {
 
         {/* Stats */}
         <SimpleGrid columns={{ base: 2, md: 4 }} gap={6}>
-          <Card.Root p={2} bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+          <Card.Root p={2} bg="white" borderWidth="1px" borderColor="gray.200">
             <Card.Body>
               <VStack gap={2} p={4}>
                 <Icon as={Zap} color="blue.500" />
                 <Text fontSize="2xl" fontWeight="bold">{stats.total}</Text>
                 <Text fontSize="sm" color="gray.600">Total Rules</Text>
+                <TrendIndicator trend={trend.trend} value={trend.value} />
               </VStack>
             </Card.Body>
           </Card.Root>
 
-          <Card.Root p={2} bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+          <Card.Root p={2} bg="white" borderWidth="1px" borderColor="gray.200">
             <VStack gap={2} p={4}>
               <Icon as={Play} color="green.500" />
               <Text fontSize="2xl" fontWeight="bold" color="green.500">{stats.active}</Text>
@@ -277,7 +380,7 @@ export const AutomationRulesPage: React.FC = () => {
             </VStack>
           </Card.Root>
 
-          <Card.Root p={2} bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+          <Card.Root p={2} bg="white" borderWidth="1px" borderColor="gray.200">
             <VStack gap={2} p={4}>
               <Icon as={Pause} color="gray.500" />
               <Text fontSize="2xl" fontWeight="bold" color="gray.500">{stats.inactive}</Text>
@@ -285,14 +388,13 @@ export const AutomationRulesPage: React.FC = () => {
             </VStack>
           </Card.Root>
 
-          <Card.Root p={2} bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+          <Card.Root p={2} bg="white" borderWidth="1px" borderColor="gray.200">
             <VStack gap={2} p={4}>
               <Icon as={AlertTriangle} color="red.500" />
-              <Text fontSize="2xl" fontWeight="bold" color="red.500">{stats.error}</Text>
-              <Text fontSize="sm" color="gray.600">Errors</Text>
+              <Text fontSize="2xl" fontWeight="bold" color="red.500">{stats.triggered}</Text>
+              <Text fontSize="sm" color="gray.600">Triggered</Text>
             </VStack>
           </Card.Root>
-
         </SimpleGrid>
 
         {/* Filters and Actions */}
@@ -305,133 +407,186 @@ export const AutomationRulesPage: React.FC = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </InputGroup>
-            <NativeSelect.Root size="sm" width="200px">
-              <NativeSelect.Field value={statusFilter} onChange={e => setStatusFilter(e.currentTarget.value)}>
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="error">Error</option>
-              </NativeSelect.Field>
-            </NativeSelect.Root>
-            <NativeSelect.Root size="sm" width="200px">
-              <NativeSelect.Field value={priorityFilter} onChange={e => setPriorityFilter(e.currentTarget.value)}>
-                <option value="all">All Priorities</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </NativeSelect.Field>
-            </NativeSelect.Root>
+            <Select.Root
+              collection={statusCollection}
+              value={[statusFilter]}
+              onValueChange={({ value }) => setStatusFilter(value?.[0] || 'all')}
+              width="200px"
+            >
+              <Select.HiddenSelect />
+              <Select.Control>
+                <Select.Trigger>
+                  <Select.ValueText placeholder="All Status" />
+                </Select.Trigger>
+                <Select.IndicatorGroup>
+                  <Select.Indicator />
+                </Select.IndicatorGroup>
+              </Select.Control>
+              <Select.Positioner>
+                <Select.Content>
+                  {statusCollection.items.map((item) => (
+                    <Select.Item item={item} key={item.value}>
+                      {item.label}
+                      <Select.ItemIndicator />
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Positioner>
+            </Select.Root>
+            <Select.Root
+              collection={priorityCollection}
+              value={[priorityFilter]}
+              onValueChange={({ value }) => setPriorityFilter(value?.[0] || 'all')}
+              width="200px"
+            >
+              <Select.HiddenSelect />
+              <Select.Control>
+                <Select.Trigger>
+                  <Select.ValueText placeholder="All Priorities" />
+                </Select.Trigger>
+                <Select.IndicatorGroup>
+                  <Select.Indicator />
+                </Select.IndicatorGroup>
+              </Select.Control>
+              <Select.Positioner>
+                <Select.Content>
+                  {priorityCollection.items.map((item) => (
+                    <Select.Item item={item} key={item.value}>
+                      {item.label}
+                      <Select.ItemIndicator />
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Positioner>
+            </Select.Root>
           </HStack>
-          <Button leftIcon={<Plus size={16} />} colorPalette="blue">
-            Create Rule
-          </Button>
+          <HStack gap={2}>
+            <Button variant="outline" onClick={() => fetchRules()} loading={isLoading}>
+              <RefreshCw size={16} />
+              Refresh
+            </Button>
+            <Button colorPalette="blue" onClick={() => navigate('/automation/new')}>
+              <Plus size={16} />Create Rule
+            </Button>
+          </HStack>
         </HStack>
 
         {/* Rules Grid */}
-        <SimpleGrid columns={{ base: 1, lg: 2 }} gap={6}>
-          {filteredRules.map((rule) => (
-            <Card.Root key={rule.id} p={6} bg={cardBg} borderWidth="1px" borderColor={borderColor}>
-              <Box pb={2}>
-                <Flex justify="space-between" align="start">
-                  <VStack align="start" gap={2}>
-                    <HStack>
-                      <Icon as={getTriggerIcon(rule.trigger.type)} color="blue.500" />
-                      <Heading size="md">{rule.name}</Heading>
-                    </HStack>
-                    <HStack gap={2}>
-                      <Badge colorPalette={getStatusColor(rule.status)} variant="subtle">
-                        {rule.status}
-                      </Badge>
-                      <Badge colorPalette={getPriorityColor(rule.priority)} variant="outline">
-                        {rule.priority}
-                      </Badge>
+        {isLoading ? (
+          <SimpleGrid columns={{ base: 1, lg: 2 }} gap={6}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card.Root key={i} p={6} bg="white" borderWidth="1px" borderColor="gray.200">
+                <Skeleton height="200px" />
+              </Card.Root>
+            ))}
+          </SimpleGrid>
+        ) : (
+          <SimpleGrid columns={{ base: 1, lg: 2 }} gap={6}>
+            {filteredRules.map((rule) => (
+              <Card.Root key={rule.ruleId} p={6} bg="white" borderWidth="1px" borderColor="gray.200">
+                <Box pb={2}>
+                  <Flex justify="space-between" align="start">
+                    <VStack align="start" gap={2}>
+                      <HStack>
+                        <AutomationIcon type={rule.actionType} />
+                        <Heading size="md">{rule.name}</Heading>
+                      </HStack>
+                      <HStack gap={2}>
+                        <Badge colorPalette={getStatusColor(rule.isActive)} variant="subtle">
+                          {rule.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                        <Badge colorPalette={getPriorityColor(getPriority(rule))} variant="outline">
+                          {getPriority(rule)}
+                        </Badge>
+                      </HStack>
+                    </VStack>
+                    <Menu.Root>
+                      <Menu.Trigger asChild>
+                        <IconButton aria-label="More actions" variant="ghost" size="sm"><MoreVertical size={16} /></IconButton>
+                      </Menu.Trigger>
+                      <Portal>
+                        <Menu.Positioner>
+                          <Menu.Content>
+                            <Menu.Item value="view" onClick={() => handleViewDetails(rule)}>
+                              <Eye size={16} style={{ marginRight: 8 }} /> View Details
+                            </Menu.Item>
+                            <Menu.Item value="edit" onClick={() => navigate(`/automation/${rule.ruleId}/edit`)}>
+                              <Edit size={16} style={{ marginRight: 8 }} /> Edit Rule
+                            </Menu.Item>
+                            <Menu.Item value="test" onClick={() => {
+                              toaster.create({
+                                title: 'Test Rule',
+                                description: 'Rule test initiated',
+                                type: 'info',
+                                duration: 3000,
+                                closable: true,
+                              });
+                            }}>
+                              <Play size={16} style={{ marginRight: 8 }} /> Test Rule
+                            </Menu.Item>
+                            <Menu.Item value="delete" color="fg.error" onClick={() => {
+                              setRuleToDelete(rule);
+                              onDeleteOpen();
+                            }}>
+                              <Trash2 size={16} style={{ marginRight: 8 }} /> Delete Rule
+                            </Menu.Item>
+                          </Menu.Content>
+                        </Menu.Positioner>
+                      </Portal>
+                    </Menu.Root>
+                  </Flex>
+                </Box>
+                <Box pt={0}>
+                  <VStack align="stretch" gap={4}>
+                    {rule.description && (
+                      <Text fontSize="sm" color="gray.600">
+                        {rule.description}
+                      </Text>
+                    )}
+                    <Box>
+                      <Text fontSize="sm" fontWeight="medium" mb={2}>
+                        Trigger:
+                      </Text>
+                      <Text fontSize="sm" color="gray.600">
+                        {getTriggerDescription(rule)}
+                      </Text>
+                    </Box>
+                    <Box>
+                      <Text fontSize="sm" fontWeight="medium" mb={2}>
+                        Actions:
+                      </Text>
+                      <VStack align="start" gap={2}>
+                        <HStack p={2} bg="blue.50" borderRadius="md" w="full">
+                          <Icon as={Zap} color="blue.500" boxSize="16px" />
+                          <Text fontSize="sm">{getActionDescription(rule)}</Text>
+                        </HStack>
+                      </VStack>
+                    </Box>
+                    <Box as="hr" my={4} borderColor="gray.200" />
+                    <HStack justify="space-between" fontSize="sm" color="gray.500" gap={2}>
+                      <VStack align="start" gap={0}>
+                        <Text>Last triggered: {rule.lastTriggered ? new Date(rule.lastTriggered).toLocaleString() : 'Never'}</Text>
+                        <Text>Cooldown: {rule.cooldownMinutes} min</Text>
+                      </VStack>
+                      <VStack align="end" gap={2}>
+                        <Switch.Root 
+                          checked={rule.isActive} 
+                          onCheckedChange={() => handleToggleStatus(rule.ruleId, rule.isActive)} 
+                          size="sm"
+                        >
+                          <Switch.HiddenInput />
+                          <Switch.Control />
+                        </Switch.Root>
+                      </VStack>
                     </HStack>
                   </VStack>
-                  <Menu.Root>
-                    <Menu.Trigger asChild>
-                      <IconButton aria-label="More actions" variant="ghost" size="sm" icon={<MoreVertical size={16} />} />
-                    </Menu.Trigger>
-                    <Portal>
-                      <Menu.Positioner>
-                        <Menu.Content>
-                          <Menu.Item value="view" onClick={() => handleViewDetails(rule)}>
-                            <Eye size={16} style={{ marginRight: 8 }} /> View Details
-                          </Menu.Item>
-                          <Menu.Item value="edit">
-                            <Edit size={16} style={{ marginRight: 8 }} /> Edit Rule
-                          </Menu.Item>
-                          <Menu.Item value="test">
-                            <Play size={16} style={{ marginRight: 8 }} /> Test Rule
-                          </Menu.Item>
-                          <Menu.Item value="delete" color="fg.error">
-                            <Trash2 size={16} style={{ marginRight: 8 }} /> Delete Rule
-                          </Menu.Item>
-                        </Menu.Content>
-                      </Menu.Positioner>
-                    </Portal>
-                  </Menu.Root>
-                </Flex>
-              </Box>
-              <Box pt={0}>
-                <VStack align="stretch" gap={4}>
-                  <Text fontSize="sm" color="gray.600">
-                    {rule.description}
-                  </Text>
-                  <Box>
-                    <Text fontSize="sm" fontWeight="medium" mb={2}>
-                      Trigger:
-                    </Text>
-                    <Text fontSize="sm" color="gray.600">
-                      {rule.trigger.type === 'sensor' && `${rule.trigger.sensor} - ${rule.trigger.condition}`}
-                      {rule.trigger.type === 'time' && `Daily at ${rule.trigger.time}`}
-                      {rule.trigger.type === 'condition' && rule.trigger.condition}
-                      {rule.trigger.type === 'manual' && 'Manual activation'}
-                    </Text>
-                  </Box>
-                  <Box>
-                    <Text fontSize="sm" fontWeight="medium" mb={2}>
-                      Actions ({rule.actions.length}):
-                    </Text>
-                    <VStack align="start" gap={2}>
-                      {rule.actions.slice(0, 2).map((action, index) => (
-                        <Text key={index} fontSize="sm" color="gray.600">
-                          • {action}
-                        </Text>
-                      ))}
-                      {rule.actions.length > 2 && (
-                        <Text fontSize="sm" color="gray.500">
-                          +{rule.actions.length - 2} more actions
-                        </Text>
-                      )}
-                    </VStack>
-                  </Box>
-                  <Box as="hr" my={4} borderColor="gray.200" />
-                  <HStack justify="space-between" fontSize="sm" color="gray.500" gap={2}>
-                    <VStack align="start" gap={0}>
-                      <Text>Executed {rule.executionCount} times</Text>
-                      <Text>{rule.successRate}% success rate</Text>
-                    </VStack>
-                    <VStack align="end" gap={2}>
-                      <Text>Last: {rule.lastExecuted || 'Never'}</Text>
-                      <Switch.Root checked={rule.status === 'active'} onCheckedChange={() => handleToggleStatus(rule.id)} size="sm">
-                        <Switch.HiddenInput />
-                        <Switch.Control />
-                      </Switch.Root>
-                    </VStack>
-                  </HStack>
-                  <Flex wrap="wrap" gap={2}>
-                    {rule.tags.map((tag, index) => (
-                      <Badge key={index} size="sm" variant="outline" colorPalette="gray">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </Flex>
-                </VStack>
-              </Box>
-            </Card.Root>
-          ))}
-        </SimpleGrid>
-        {filteredRules.length === 0 && (
+                </Box>
+              </Card.Root>
+            ))}
+          </SimpleGrid>
+        )}
+
+        {!isLoading && filteredRules.length === 0 && (
           <Box textAlign="center" py={12}>
             <Icon as={Zap} size="lg" color="gray.400" mb={4} />
             <Text fontSize="lg" color="gray.500">
@@ -440,101 +595,125 @@ export const AutomationRulesPage: React.FC = () => {
           </Box>
         )}
       </VStack>
+
       {/* Rule Details Modal */}
-      <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Rule Details">
-        {selectedRule && (
-          <VStack gap={6} align="stretch">
-            <HStack justify="space-between">
-              <VStack align="start" gap={1}>
-                <HStack>
-                  <Icon as={getTriggerIcon(selectedRule.trigger.type)} color="blue.500" />
-                  <Heading size="md">{selectedRule.name}</Heading>
-                </HStack>
-                <HStack gap={2}>
-                  <Badge colorPalette={getStatusColor(selectedRule.status)} variant="subtle">
-                    {selectedRule.status}
-                  </Badge>
-                  <Badge colorPalette={getPriorityColor(selectedRule.priority)} variant="outline">
-                    {selectedRule.priority} priority
-                  </Badge>
-                </HStack>
-              </VStack>
-            </HStack>
-            <Text color="gray.600">{selectedRule.description}</Text>
-            <Box as="hr" my={4} borderColor="gray.200" />
-            <Box>
-              <Text fontWeight="medium" mb={2}>Trigger</Text>
-              <Card.Root variant="outline" p={3}>
-                <VStack align="start" gap={1}>
-                  <HStack>
-                    <Icon as={getTriggerIcon(selectedRule.trigger.type)} color="blue.500" />
-                    <Text fontWeight="medium" textTransform="capitalize">
-                      {selectedRule.trigger.type} Trigger
-                    </Text>
+      <Dialog.Root open={isOpen} onOpenChange={onClose} size="lg">
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header>
+              Rule Details
+            </Dialog.Header>
+            <Dialog.Body pb={6}>
+              {selectedRule && (
+                <VStack gap={6} align="stretch">
+                  <HStack justify="space-between">
+                    <VStack align="start" gap={1}>
+                      <HStack>
+                        <AutomationIcon type={selectedRule.actionType} />
+                        <Heading size="md">{selectedRule.name}</Heading>
+                      </HStack>
+                      <HStack gap={2}>
+                        <Badge colorPalette={getStatusColor(selectedRule.isActive)} variant="subtle">
+                          {selectedRule.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                        <Badge colorPalette={getPriorityColor(getPriority(selectedRule))} variant="outline">
+                          {getPriority(selectedRule)} priority
+                        </Badge>
+                      </HStack>
+                    </VStack>
                   </HStack>
-                  <Text fontSize="sm" color="gray.600">
-                    {selectedRule.trigger.type === 'sensor' && `${selectedRule.trigger.sensor} - ${selectedRule.trigger.condition}`}
-                    {selectedRule.trigger.type === 'time' && `Daily at ${selectedRule.trigger.time}`}
-                    {selectedRule.trigger.type === 'condition' && selectedRule.trigger.condition}
-                    {selectedRule.trigger.type === 'manual' && 'Manual activation'}
-                  </Text>
+                  {selectedRule.description && (
+                    <Text color="gray.600">{selectedRule.description}</Text>
+                  )}
+                  <Box as="hr" my={4} borderColor="gray.200" />
+                  <Box>
+                    <Text fontWeight="medium" mb={2}>Trigger</Text>
+                    <Card.Root variant="outline" p={3}>
+                      <VStack align="start" gap={1}>
+                        <HStack>
+                          <AutomationIcon type={selectedRule.actionType} />
+                          <Text fontWeight="medium" textTransform="capitalize">
+                            {selectedRule.actionType} Trigger
+                          </Text>
+                        </HStack>
+                        <Text fontSize="sm" color="gray.600">
+                          {getTriggerDescription(selectedRule)}
+                        </Text>
+                      </VStack>
+                    </Card.Root>
+                  </Box>
+                  <Box>
+                    <Text fontWeight="medium" mb={2}>Actions</Text>
+                    <VStack align="start" gap={2}>
+                      <HStack p={2} bg="blue.50" borderRadius="md" w="full">
+                        <Icon as={Zap} color="blue.500" boxSize="16px" />
+                        <Text fontSize="sm">{getActionDescription(selectedRule)}</Text>
+                      </HStack>
+                    </VStack>
+                  </Box>
+                  <Box as="hr" my={4} borderColor="gray.200" />
+                  <SimpleGrid columns={2} gap={4}>
+                    <Box>
+                      <Text fontWeight="medium" mb={1}>Last Triggered</Text>
+                      <Text fontSize="sm" color="gray.600">
+                        {selectedRule.lastTriggered ? new Date(selectedRule.lastTriggered).toLocaleString() : 'Never'}
+                      </Text>
+                    </Box>
+                    <Box>
+                      <Text fontWeight="medium" mb={1}>Cooldown</Text>
+                      <Text fontSize="sm" color="gray.600">{selectedRule.cooldownMinutes} minutes</Text>
+                    </Box>
+                    <Box>
+                      <Text fontWeight="medium" mb={1}>Created</Text>
+                      <Text fontSize="sm" color="gray.600">
+                        {new Date(selectedRule.createdAt).toLocaleDateString()}
+                      </Text>
+                    </Box>
+                    <Box>
+                      <Text fontWeight="medium" mb={1}>Updated</Text>
+                      <Text fontSize="sm" color="gray.600">
+                        {new Date(selectedRule.updatedAt).toLocaleDateString()}
+                      </Text>
+                    </Box>
+                  </SimpleGrid>
                 </VStack>
-              </Card.Root>
-            </Box>
-            <Box>
-              <Text fontWeight="medium" mb={2}>Conditions ({selectedRule.conditions.length})</Text>
-              <VStack align="start" gap={2}>
-                {selectedRule.conditions.map((condition, index) => (
-                  <HStack key={index} p={2} bg="gray.50" borderRadius="md" w="full">
-                    <Icon as={CheckCircle} color="green.500" boxSize="16px" />
-                    <Text fontSize="sm">{condition}</Text>
-                  </HStack>
-                ))}
+              )}
+            </Dialog.Body>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog.Root open={isDeleteOpen} onOpenChange={onDeleteClose} size="md">
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header>
+              Delete Automation Rule
+            </Dialog.Header>
+            <Dialog.Body pb={6}>
+              <VStack gap={4} align="stretch">
+                <AlertRoot status="warning">
+                  <AlertTitle>Are you sure?</AlertTitle>
+                  <AlertDescription>
+                    This action cannot be undone. This will permanently delete the automation rule.
+                  </AlertDescription>
+                </AlertRoot>
+                
+                <HStack gap={4} justify="flex-end">
+                  <Button variant="outline" onClick={onDeleteClose}>
+                    Cancel
+                  </Button>
+                  <Button colorPalette="red" onClick={handleDelete}>
+                    Delete Rule
+                  </Button>
+                </HStack>
               </VStack>
-            </Box>
-            <Box>
-              <Text fontWeight="medium" mb={2}>Actions ({selectedRule.actions.length})</Text>
-              <VStack align="start" gap={2}>
-                {selectedRule.actions.map((action, index) => (
-                  <HStack key={index} p={2} bg="blue.50" borderRadius="md" w="full">
-                    <Icon as={Zap} color="blue.500" boxSize="16px" />
-                    <Text fontSize="sm">{action}</Text>
-                  </HStack>
-                ))}
-              </VStack>
-            </Box>
-            <Box as="hr" my={4} borderColor="gray.200" />
-            <SimpleGrid columns={2} gap={4}>
-              <Box>
-                <Text fontWeight="medium" mb={1}>Execution Count</Text>
-                <Text fontSize="lg" fontWeight="bold">{selectedRule.executionCount}</Text>
-              </Box>
-              <Box>
-                <Text fontWeight="medium" mb={1}>Success Rate</Text>
-                <Text fontSize="lg" fontWeight="bold" color="green.500">{selectedRule.successRate}%</Text>
-              </Box>
-              <Box>
-                <Text fontWeight="medium" mb={1}>Last Executed</Text>
-                <Text fontSize="sm" color="gray.600">{selectedRule.lastExecuted || 'Never'}</Text>
-              </Box>
-              <Box>
-                <Text fontWeight="medium" mb={1}>Created</Text>
-                <Text fontSize="sm" color="gray.600">{selectedRule.createdAt}</Text>
-              </Box>
-            </SimpleGrid>
-            <Box>
-              <Text fontWeight="medium" mb={2}>Tags</Text>
-              <Flex wrap="wrap" gap={2}>
-                {selectedRule.tags.map((tag, index) => (
-                  <Badge key={index} variant="outline" colorPalette="blue">
-                    {tag}
-                  </Badge>
-                ))}
-              </Flex>
-            </Box>
-          </VStack>
-        )}
-      </Modal>
+            </Dialog.Body>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
     </Container>
   );
 };

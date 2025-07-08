@@ -1,5 +1,5 @@
-import { User as ApiUser } from '../../shared/types/api.types';
-import { UserPermissions } from '../../shared/types/auth.types';
+import type { User as ApiUser } from '@shared/types/api.types';
+import type { UserPermissions } from '@shared/types/auth.types';
 
 export class User {
   public readonly id: number;
@@ -14,12 +14,12 @@ export class User {
   constructor(data: ApiUser) {
     this.id = data.id;
     this.email = data.email;
-    this.firstName = data.first_name;
-    this.lastName = data.last_name;
+    this.firstName = data.firstName;
+    this.lastName = data.lastName;
     this.role = data.role;
-    this.isActive = data.is_active;
-    this.createdAt = new Date(data.created_at);
-    this.updatedAt = new Date(data.updated_at);
+    this.isActive = data.isActive || false;
+    this.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
+    this.updatedAt = data.updatedAt ? new Date(data.updatedAt) : new Date();
   }
 
   // Computed properties
@@ -32,10 +32,15 @@ export class User {
   }
 
   get initials(): string {
-    if (this.firstName && this.lastName) {
-      return `${this.firstName[0]}${this.lastName[0]}`.toUpperCase();
+    const firstInitial = this.firstName.charAt(0);
+    const lastInitial = this.lastName.charAt(0);
+    const initials = `${firstInitial}${lastInitial}`.trim();
+
+    if (initials.length > 0) {
+      return initials.toUpperCase();
     }
-    return this.email[0].toUpperCase();
+
+    return this.email.charAt(0).toUpperCase();
   }
 
   get isAdmin(): boolean {
@@ -125,12 +130,12 @@ export class User {
     return {
       id: this.id,
       email: this.email,
-      first_name: this.firstName,
-      last_name: this.lastName,
+      firstName: this.firstName,
+      lastName: this.lastName,
       role: this.role,
-      is_active: this.isActive,
-      created_at: this.createdAt.toISOString(),
-      updated_at: this.updatedAt.toISOString(),
+      isActive: this.isActive,
+      createdAt: this.createdAt.toISOString(),
+      updatedAt: this.updatedAt.toISOString(),
     };
   }
 
@@ -144,32 +149,32 @@ export class User {
     const userData: ApiUser = {
       id: 0, // Will be set by backend
       email: data.email || '',
-      first_name: data.first_name || '',
-      last_name: data.last_name || '',
+      firstName: data.firstName || '',
+      lastName: data.lastName || '',
       role: data.role || 'user',
-      is_active: data.is_active ?? true,
-      created_at: data.created_at || now,
-      updated_at: data.updated_at || now,
+      isActive: data.isActive ?? true,
+      createdAt: data.createdAt || now,
+      updatedAt: data.updatedAt || now,
     };
     return new User(userData);
   }
 
   // Update methods (returns new instance)
-  update(data: Partial<Pick<ApiUser, 'first_name' | 'last_name' | 'role' | 'is_active'>>): User {
+  update(data: Partial<Pick<ApiUser, 'firstName' | 'lastName' | 'role' | 'isActive'>>): User {
     const updatedData: ApiUser = {
       ...this.toJSON(),
       ...data,
-      updated_at: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     return new User(updatedData);
   }
 
   activate(): User {
-    return this.update({ is_active: true });
+    return this.update({ isActive: true });
   }
 
   deactivate(): User {
-    return this.update({ is_active: false });
+    return this.update({ isActive: false });
   }
 
   promoteToAdmin(): User {

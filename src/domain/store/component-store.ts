@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { ComponentType, ComponentDeployment } from '../entities/component.entity';
+import type { ComponentType, ComponentDeployment } from '../entities/component.entity';
+import { componentApi } from '../../infrastructure/api/component-api';
 
-interface ComponentState {
+interface ComponentStoreState {
   componentTypes: ComponentType[];
   deployments: ComponentDeployment[];
   selectedType: ComponentType | null;
@@ -41,7 +42,89 @@ interface UpdateDeploymentData {
   active?: boolean;
 }
 
-export const useComponentStore = create<ComponentState>((set, get) => ({
+// Validation utilities
+const isValidComponentType = (type: any): type is ComponentType => {
+  return (
+    type &&
+    typeof type.id === 'number' &&
+    typeof type.name === 'string' &&
+    typeof type.identifier === 'string' &&
+    typeof type.category === 'string' &&
+    (type.category === 'sensor' || type.category === 'actuator')
+  );
+};
+
+const isValidComponentDeployment = (deployment: any): deployment is ComponentDeployment => {
+  return (
+    deployment &&
+    typeof deployment.id === 'number' &&
+    typeof deployment.componentTypeId === 'number' &&
+    typeof deployment.deviceId === 'number' &&
+    typeof deployment.active === 'boolean' &&
+    deployment.componentType &&
+    deployment.device
+  );
+};
+
+const sanitizeComponentType = (type: any): ComponentType => {
+  if (!isValidComponentType(type)) {
+    throw new Error('Invalid component type data');
+  }
+
+  return {
+    id: type.id,
+    name: type.name,
+    identifier: type.identifier,
+    category: type.category as 'sensor' | 'actuator',
+    unit: type.unit,
+    description: type.description || '',
+    metadata: type.metadata || {},
+    createdAt: type.createdAt || new Date().toISOString(),
+    updatedAt: type.updatedAt || new Date().toISOString(),
+  };
+};
+
+const sanitizeComponentDeployment = (deployment: any): ComponentDeployment => {
+  if (!isValidComponentDeployment(deployment)) {
+    throw new Error('Invalid component deployment data');
+  }
+
+  return {
+    id: deployment.id,
+    componentTypeId: deployment.componentTypeId,
+    deviceId: deployment.deviceId,
+    active: deployment.active,
+    createdAt: deployment.createdAt || new Date().toISOString(),
+    updatedAt: deployment.updatedAt || new Date().toISOString(),
+    componentType: {
+      id: deployment.componentType.id || 0,
+      name: deployment.componentType.name || 'Unknown Type',
+      identifier: deployment.componentType.identifier || 'unknown',
+      category: deployment.componentType.category || 'sensor',
+      unit: deployment.componentType.unit,
+      description: deployment.componentType.description || '',
+      metadata: deployment.componentType.metadata || {},
+      createdAt: deployment.componentType.createdAt || new Date().toISOString(),
+      updatedAt: deployment.componentType.updatedAt || new Date().toISOString(),
+    },
+    device: {
+      id: deployment.device.id || 0,
+      identifier: deployment.device.identifier || 'unknown-device',
+      deviceType: deployment.device.deviceType || 'esp32',
+      model: deployment.device.model || 'Unknown Model',
+      ipAddress: deployment.device.ipAddress,
+      port: deployment.device.port,
+      active: deployment.device.active ?? true,
+      status: deployment.device.status || 'unknown',
+      lastSeen: deployment.device.lastSeen,
+      createdAt: deployment.device.createdAt || new Date().toISOString(),
+      updatedAt: deployment.device.updatedAt || new Date().toISOString(),
+      componentDeployments: deployment.device.componentDeployments || [],
+    },
+  };
+};
+
+export const useComponentStore = create<ComponentStoreState>((set, get) => ({
   componentTypes: [],
   deployments: [],
   selectedType: null,
@@ -54,72 +137,16 @@ export const useComponentStore = create<ComponentState>((set, get) => ({
   fetchComponentTypes: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { category, search } = params;
+      const response = await componentApi.getComponentTypes(params);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock data
-      const mockTypes: ComponentType[] = [
-        {
-          id: 1,
-          name: 'Temperature Sensor',
-          identifier: 'TEMP_SENSOR',
-          category: 'sensor',
-          unit: '°C',
-          description: 'Digital temperature sensor with high accuracy',
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-01T00:00:00Z'
-        },
-        {
-          id: 2,
-          name: 'Humidity Sensor',
-          identifier: 'HUMIDITY_SENSOR',
-          category: 'sensor',
-          unit: '%',
-          description: 'Relative humidity sensor',
-          createdAt: '2024-01-02T00:00:00Z',
-          updatedAt: '2024-01-02T00:00:00Z'
-        },
-        {
-          id: 3,
-          name: 'Relay Switch',
-          identifier: 'RELAY_SWITCH',
-          category: 'actuator',
-          description: 'Digital relay for controlling electrical devices',
-          createdAt: '2024-01-03T00:00:00Z',
-          updatedAt: '2024-01-03T00:00:00Z'
-        },
-        {
-          id: 4,
-          name: 'Servo Motor',
-          identifier: 'SERVO_MOTOR',
-          category: 'actuator',
-          unit: 'degrees',
-          description: 'Precision servo motor for position control',
-          createdAt: '2024-01-04T00:00:00Z',
-          updatedAt: '2024-01-04T00:00:00Z'
-        }
-      ];
-
-      let filteredTypes = mockTypes;
-      
-      if (category) {
-        filteredTypes = filteredTypes.filter(type => type.category === category);
-      }
-      
-      if (search) {
-        filteredTypes = filteredTypes.filter(type => 
-          type.name.toLowerCase().includes(search.toLowerCase()) ||
-          type.identifier.toLowerCase().includes(search.toLowerCase()) ||
-          type.description?.toLowerCase().includes(search.toLowerCase())
-        );
-      }
+      // Validate and sanitize component types
+      const validTypes = response
+        .filter(isValidComponentType)
+        .map(sanitizeComponentType);
       
       set({
-        componentTypes: filteredTypes,
-        totalTypes: filteredTypes.length,
+        componentTypes: validTypes,
+        totalTypes: response.total || validTypes.length,
         isLoading: false
       });
     } catch (error) {
@@ -133,97 +160,16 @@ export const useComponentStore = create<ComponentState>((set, get) => ({
   fetchDeployments: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { deviceId, componentTypeId, activeOnly = true } = params;
+      const response = await componentApi.getDeployments(params);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock data
-      const mockDeployments: ComponentDeployment[] = [
-        {
-          id: 1,
-          componentTypeId: 1,
-          deviceId: 1,
-          active: true,
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-01T00:00:00Z',
-          componentType: {
-            id: 1,
-            name: 'Temperature Sensor',
-            identifier: 'TEMP_SENSOR',
-            category: 'sensor',
-            unit: '°C',
-            description: 'Digital temperature sensor with high accuracy',
-            createdAt: '2024-01-01T00:00:00Z',
-            updatedAt: '2024-01-01T00:00:00Z'
-          },
-          device: {
-            id: 1,
-            identifier: 'GATEWAY-001',
-            deviceType: 'gateway' as any,
-            model: 'IoT Gateway Pro',
-            ipAddress: '192.168.1.100',
-            port: 8080,
-            active: true,
-            status: 'connected' as any,
-            lastSeen: new Date().toISOString(),
-            createdAt: '2024-01-01T00:00:00Z',
-            updatedAt: '2024-01-01T00:00:00Z',
-            componentDeployments: []
-          }
-        },
-        {
-          id: 2,
-          componentTypeId: 2,
-          deviceId: 2,
-          active: true,
-          createdAt: '2024-01-02T00:00:00Z',
-          updatedAt: '2024-01-02T00:00:00Z',
-          componentType: {
-            id: 2,
-            name: 'Humidity Sensor',
-            identifier: 'HUMIDITY_SENSOR',
-            category: 'sensor',
-            unit: '%',
-            description: 'Relative humidity sensor',
-            createdAt: '2024-01-02T00:00:00Z',
-            updatedAt: '2024-01-02T00:00:00Z'
-          },
-          device: {
-            id: 2,
-            identifier: 'SENSOR-001',
-            deviceType: 'sensor_node' as any,
-            model: 'Temperature Sensor',
-            ipAddress: '192.168.1.101',
-            port: 8081,
-            active: true,
-            status: 'connected' as any,
-            lastSeen: new Date().toISOString(),
-            createdAt: '2024-01-02T00:00:00Z',
-            updatedAt: '2024-01-02T00:00:00Z',
-            componentDeployments: []
-          }
-        }
-      ];
-
-      let filteredDeployments = mockDeployments;
-      
-      if (deviceId) {
-        filteredDeployments = filteredDeployments.filter(deployment => deployment.deviceId === deviceId);
-      }
-      
-      if (componentTypeId) {
-        filteredDeployments = filteredDeployments.filter(deployment => deployment.componentTypeId === componentTypeId);
-      }
-      
-      if (activeOnly) {
-        filteredDeployments = filteredDeployments.filter(deployment => deployment.active);
-      }
+      // Validate and sanitize deployments
+      const validDeployments = response
+        .filter(isValidComponentDeployment)
+        .map(sanitizeComponentDeployment);
       
       set({
-        deployments: filteredDeployments,
-        totalDeployments: filteredDeployments.length,
+        deployments: validDeployments,
+        totalDeployments: response.total || validDeployments.length,
         isLoading: false
       });
     } catch (error) {
@@ -237,15 +183,9 @@ export const useComponentStore = create<ComponentState>((set, get) => ({
   createComponentType: async (typeData: CreateComponentTypeData) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await componentApi.createComponentType(typeData);
       
-      const newType: ComponentType = {
-        id: Date.now(),
-        ...typeData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      const newType = sanitizeComponentType(response);
       
       set(state => ({
         componentTypes: [...state.componentTypes, newType],
@@ -266,33 +206,9 @@ export const useComponentStore = create<ComponentState>((set, get) => ({
   createDeployment: async (deploymentData: CreateDeploymentData) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await componentApi.createDeployment(deploymentData);
       
-      const newDeployment: ComponentDeployment = {
-        id: Date.now(),
-        ...deploymentData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        componentType: {
-          id: deploymentData.componentTypeId,
-          name: 'Mock Component',
-          identifier: 'MOCK_COMP',
-          category: 'sensor',
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-01T00:00:00Z'
-        },
-        device: {
-          id: deploymentData.deviceId,
-          identifier: 'MOCK_DEVICE',
-          deviceType: 'sensor_node' as any,
-          active: true,
-          status: 'connected' as any,
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-01T00:00:00Z',
-          componentDeployments: []
-        }
-      };
+      const newDeployment = sanitizeComponentDeployment(response);
       
       set(state => ({
         deployments: [...state.deployments, newDeployment],
@@ -313,20 +229,16 @@ export const useComponentStore = create<ComponentState>((set, get) => ({
   updateDeployment: async (id: number, deploymentData: UpdateDeploymentData) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await componentApi.updateDeployment(id, deploymentData);
+      
+      const updatedDeployment = sanitizeComponentDeployment(response);
       
       set(state => ({
-        deployments: state.deployments.map(deployment => 
-          deployment.id === id 
-            ? { ...deployment, ...deploymentData, updatedAt: new Date().toISOString() }
-            : deployment
-        ),
+        deployments: state.deployments.map(deployment => deployment.id === id ? updatedDeployment : deployment),
         isLoading: false
       }));
       
-      const updatedDeployment = get().deployments.find(d => d.id === id);
-      return updatedDeployment!;
+      return updatedDeployment;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to update deployment',
@@ -339,8 +251,7 @@ export const useComponentStore = create<ComponentState>((set, get) => ({
   deleteDeployment: async (id: number) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await componentApi.deleteDeployment(id);
       
       set(state => ({
         deployments: state.deployments.filter(deployment => deployment.id !== id),
@@ -357,10 +268,18 @@ export const useComponentStore = create<ComponentState>((set, get) => ({
   },
 
   setSelectedType: (type: ComponentType | null) => {
+    if (type && !isValidComponentType(type)) {
+      console.warn('Invalid component type data provided to setSelectedType');
+      return;
+    }
     set({ selectedType: type });
   },
 
   setSelectedDeployment: (deployment: ComponentDeployment | null) => {
+    if (deployment && !isValidComponentDeployment(deployment)) {
+      console.warn('Invalid deployment data provided to setSelectedDeployment');
+      return;
+    }
     set({ selectedDeployment: deployment });
   },
 

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Box, Text, Stack, Badge, CardRoot, CardBody } from '@chakra-ui/react';
 import type { Alert as AlertType } from '@domain/entities/automation.entity';
 

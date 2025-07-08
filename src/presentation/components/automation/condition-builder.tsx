@@ -1,4 +1,3 @@
-import React from 'react';
 import { Stack, Input, Select, createListCollection } from '@chakra-ui/react';
 import { Field } from '@ui/chakra/field';
 

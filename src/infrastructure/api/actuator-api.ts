@@ -17,10 +17,32 @@ export interface DeploymentStatusResponse {
   lastInteraction?: string;
 }
 
+export interface ToggleCommandRequest {
+  command: string;
+}
+
+export interface ToggleCommandResponse {
+  data: {
+      success: boolean;
+      deploymentId: number;
+      command: string;
+      deviceId: string;
+      componentId: string;
+  }
+}
+
+export interface ActuatorStatusResponse {
+  deploymentId: number;
+  connectionStatus: string;
+  lastInteraction?: string;
+}
+
 export interface ActuatorApi {
   sendCommand: (deploymentId: number, commandData: SendCommandRequest) => Promise<ActuatorCommand>;
   getCommands: (deploymentId: number, params?: { skip?: number; limit?: number }) => Promise<CommandsResponse>;
   getDeploymentStatus: (deploymentId: number) => Promise<DeploymentStatusResponse>;
+  toggleCommand: (deploymentId: number) => Promise<ActuatorCommand>;
+  getActuatorStatus: (deploymentId: number) => Promise<ActuatorDeployment>;
 }
 
 export const actuatorApi: ActuatorApi = {
@@ -42,6 +64,11 @@ export const actuatorApi: ActuatorApi = {
 
   getDeploymentStatus: async (deploymentId: number) => {
     const response = await apiClient.get(`/actuators/${deploymentId}/status`);
+    return response;
+  },
+
+  toggleCommand: async (deploymentId: number) => {
+    const response = await apiClient.post(`/actuators/${deploymentId}/toggle`);
     return response;
   }
 }; 

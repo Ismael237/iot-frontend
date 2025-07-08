@@ -1,4 +1,4 @@
-import axios, { AxiosResponse, InternalAxiosRequestConfig, AxiosError } from 'axios';
+import axios, { type AxiosResponse, type InternalAxiosRequestConfig, AxiosError } from 'axios';
 import { useAuthStore } from '../../domain/store/auth-store';
 
 // Create axios instance
@@ -14,13 +14,10 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = useAuthStore.getState().getAccessToken();
-    
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
-    // Add request timestamp for debugging
-    config.metadata = { startTime: new Date() };
     
     return config;
   },
@@ -33,14 +30,6 @@ apiClient.interceptors.request.use(
 // Response interceptor for token refresh and error handling
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
-    // Add response time for debugging
-    const endTime = new Date();
-    const startTime = response.config.metadata?.startTime;
-    if (startTime) {
-      const duration = endTime.getTime() - startTime.getTime();
-      console.debug(`API Request: ${response.config.method?.toUpperCase()} ${response.config.url} - ${duration}ms`);
-    }
-    
     return response.data;
   },
   async (error: AxiosError) => {
@@ -51,22 +40,16 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       
       try {
-        // Try to refresh the token
-        await useAuthStore.getState().refreshToken();
-        
-        // Retry the original request with new token
         const newToken = useAuthStore.getState().getAccessToken();
         if (newToken) {
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           return apiClient(originalRequest);
         }
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
+      } catch (error) {
+        console.error('Token refresh failed:', error);
         
-        // Clear auth state and redirect to login
         useAuthStore.getState().clearAuth();
         
-        // Redirect to login page if not already there
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
@@ -87,9 +70,9 @@ apiClient.interceptors.response.use(
 );
 
 // Helper function to extract error message
-function getErrorMessage(error: AxiosError): string {
+export function getErrorMessage(error: AxiosError): string {
   if (error.response?.data) {
-    const data = error.response.data as any;
+    const data = error.response as any;
     
     // Handle different error response formats
     if (typeof data === 'string') {

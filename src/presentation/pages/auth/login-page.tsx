@@ -69,6 +69,7 @@ export const LoginPage: React.FC = () => {
             <LoginForm
               onSuccess={handleLoginSuccess}
               onError={handleLoginError}
+              redirectTo="/dashboard"
             />
           </VStack>
         </Container>

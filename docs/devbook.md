@@ -396,7 +396,7 @@ apiClient.interceptors.request.use(
 
 // Response interceptor for token refresh
 apiClient.interceptors.response.use(
-  (response: AxiosResponse) => response.data,
+  (response: AxiosResponse) => response,
   async (error) => {
     const originalRequest = error.config;
     
@@ -407,7 +407,7 @@ apiClient.interceptors.response.use(
         const refreshToken = useAuthStore.getState().refreshToken;
         if (refreshToken) {
           const response = await axios.post('/auth/refresh', { refresh_token: refreshToken });
-          const { access_token } = response.data;
+          const { access_token } = response;
           
           useAuthStore.getState().setTokens(access_token, refreshToken);
           originalRequest.headers.Authorization = `Bearer ${access_token}`;

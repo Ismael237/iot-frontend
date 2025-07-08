@@ -17,7 +17,7 @@ export const DeviceDetailPage: React.FC = () => {
       setError(null);
       try {
         const response = await apiClient.get(`/devices/${id}`);
-        setDevice(response.data);
+        setDevice(response);
       } catch (err: any) {
         setError(err?.message || 'Failed to load device');
       } finally {

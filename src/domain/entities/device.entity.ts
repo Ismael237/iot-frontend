@@ -1,5 +1,5 @@
-import { IotDevice, ComponentDeployment, ConnStatus, DeviceTypeEnum } from '../../shared/types/api.types';
-import { DeviceStatus, DeviceType } from '../../shared/types/device.types';
+import type { IotDevice, ComponentDeployment, ConnStatus, DeviceTypeEnum } from '@shared/types/api.types';
+import { DeviceStatus, DeviceType } from '@shared/types/device.types';
 
 export class Device {
   public readonly id: number;
@@ -10,26 +10,28 @@ export class Device {
   public readonly ipAddress?: string;
   public readonly port?: number;
   public readonly active: boolean;
+  public readonly status: ConnStatus;
   public readonly lastSeen?: Date;
   public readonly createdBy?: number;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
   public readonly componentDeployments?: ComponentDeployment[];
 
-  constructor(data: IotDevice & { component_deployments?: ComponentDeployment[] }) {
+  constructor(data: IotDevice & { componentDeployments?: ComponentDeployment[] }) {
     this.id = data.id;
     this.identifier = data.identifier;
-    this.deviceType = data.device_type;
+    this.deviceType = data.deviceType;
     this.model = data.model;
     this.metadata = data.metadata;
-    this.ipAddress = data.ip_address;
+    this.ipAddress = data.ipAddress;
     this.port = data.port;
     this.active = data.active;
-    this.lastSeen = data.last_seen ? new Date(data.last_seen) : undefined;
-    this.createdBy = data.created_by;
-    this.createdAt = new Date(data.created_at);
-    this.updatedAt = new Date(data.updated_at);
-    this.componentDeployments = data.component_deployments;
+    this.status = data.status;
+    this.lastSeen = data.lastSeen ? new Date(data.lastSeen) : undefined;
+    this.createdBy = data.createdBy;
+    this.createdAt = new Date(data.createdAt);
+    this.updatedAt = new Date(data.updatedAt);
+    this.componentDeployments = data.componentDeployments;
   }
 
   get displayName(): string {
@@ -42,28 +44,30 @@ export class Device {
 
   get deviceTypeLabel(): string {
     const labels: Record<DeviceTypeEnum, string> = {
-      arduino_uno: 'Arduino Uno',
-      arduino_nano: 'Arduino Nano',
       esp32: 'ESP32',
-      esp8266: 'ESP8266',
+      arduino: 'Arduino',
       raspberry_pi: 'Raspberry Pi',
-      sensor_module: 'Sensor Module',
-      actuator_module: 'Actuator Module',
       gateway: 'Gateway',
+      sensor_node: 'Sensor Node',
+      actuator_node: 'Actuator Node',
+      controller: 'Controller',
+      display: 'Display',
+      custom: 'Custom Device',
     };
     return labels[this.deviceType] || this.deviceType;
   }
 
   get deviceTypeIcon(): string {
     const icons: Record<DeviceTypeEnum, string> = {
-      arduino_uno: 'chip',
-      arduino_nano: 'chip',
       esp32: 'wifi',
-      esp8266: 'wifi',
+      arduino: 'chip',
       raspberry_pi: 'computer',
-      sensor_module: 'gauge',
-      actuator_module: 'zap',
       gateway: 'router',
+      sensor_node: 'gauge',
+      actuator_node: 'zap',
+      controller: 'cpu',
+      display: 'monitor',
+      custom: 'device',
     };
     return icons[this.deviceType] || 'device';
   }
@@ -94,25 +98,17 @@ export class Device {
   }
 
   get isOnline(): boolean {
-    if (!this.lastSeen) return false;
-    const now = new Date();
-    const diff = now.getTime() - this.lastSeen.getTime();
-    return diff < 5 * 60 * 1000; // 5 minutes
-  }
-
-  get status(): ConnStatus {
-    if (!this.active) return 'offline';
-    if (!this.lastSeen) return 'unknown';
-    if (this.isOnline) return 'online';
-    return 'offline';
+    return this.status === 'connected';
   }
 
   get statusColor(): string {
     switch (this.status) {
-      case 'online':
+      case 'connected':
         return 'green';
-      case 'offline':
+      case 'disconnected':
         return 'red';
+      case 'connecting':
+        return 'yellow';
       case 'error':
         return 'orange';
       default:
@@ -122,10 +118,12 @@ export class Device {
 
   get statusLabel(): string {
     switch (this.status) {
-      case 'online':
-        return 'Online';
-      case 'offline':
-        return 'Offline';
+      case 'connected':
+        return 'Connected';
+      case 'disconnected':
+        return 'Disconnected';
+      case 'connecting':
+        return 'Connecting';
       case 'error':
         return 'Error';
       default:
@@ -172,13 +170,13 @@ export class Device {
 
   get sensorComponents(): ComponentDeployment[] {
     return this.componentDeployments?.filter(comp => 
-      comp.component_type?.category === 'sensor' && comp.active
+      comp.componentType?.category === 'sensor' && comp.active
     ) || [];
   }
 
   get actuatorComponents(): ComponentDeployment[] {
     return this.componentDeployments?.filter(comp => 
-      comp.component_type?.category === 'actuator' && comp.active
+      comp.componentType?.category === 'actuator' && comp.active
     ) || [];
   }
 
@@ -201,31 +199,28 @@ export class Device {
   }
 
   hasComponent(componentTypeId: number): boolean {
-    return this.componentDeployments?.some(comp => 
-      comp.component_type_id === componentTypeId && comp.active
-    ) || false;
+    return this.componentDeployments?.some(comp => comp.componentTypeId === componentTypeId) || false;
   }
 
   getComponentDeployment(componentTypeId: number): ComponentDeployment | undefined {
-    return this.componentDeployments?.find(comp => 
-      comp.component_type_id === componentTypeId && comp.active
-    );
+    return this.componentDeployments?.find(comp => comp.componentTypeId === componentTypeId);
   }
 
   canReceiveCommands(): boolean {
-    return this.active && this.isActuatorNode;
+    return this.active && this.isOnline;
   }
 
   canSendData(): boolean {
-    return this.active && (this.isSensorNode || this.isGateway);
+    return this.active && this.isOnline;
   }
 
   isValid(): boolean {
     return (
       this.id > 0 &&
       this.identifier.length > 0 &&
-      Object.values(DeviceTypeEnum).includes(this.deviceType) &&
+      this.deviceType &&
       this.active !== undefined &&
+      this.status &&
       this.createdAt instanceof Date &&
       this.updatedAt instanceof Date
     );
@@ -238,34 +233,24 @@ export class Device {
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
     if (!ipRegex.test(this.ipAddress)) return false;
     
-    // Port validation
-    if (this.port !== undefined && (this.port < 1 || this.port > 65535)) {
-      return false;
+    // Port validation if provided
+    if (this.port !== undefined) {
+      return this.port >= 1 && this.port <= 65535;
     }
     
     return true;
   }
 
   getStatus(): DeviceStatus {
-    if (!this.active) return DeviceStatus.OFFLINE;
-    if (!this.hasConnectionInfo) return DeviceStatus.ERROR;
-    return DeviceStatus.ONLINE;
+    return {
+      deviceId: this.id,
+      status: this.status,
+      lastSeen: this.lastSeen?.toISOString(),
+    };
   }
 
   getStatusColor(): string {
-    const status = this.getStatus();
-    switch (status) {
-      case DeviceStatus.ONLINE:
-        return 'green';
-      case DeviceStatus.OFFLINE:
-        return 'red';
-      case DeviceStatus.ERROR:
-        return 'orange';
-      case DeviceStatus.MAINTENANCE:
-        return 'yellow';
-      default:
-        return 'gray';
-    }
+    return this.statusColor;
   }
 
   equals(other: Device): boolean {
@@ -280,20 +265,21 @@ export class Device {
     return {
       id: this.id,
       identifier: this.identifier,
-      device_type: this.deviceType,
+      deviceType: this.deviceType,
       model: this.model,
-      metadata: this.metadata,
-      ip_address: this.ipAddress,
+      ipAddress: this.ipAddress,
       port: this.port,
       active: this.active,
-      last_seen: this.lastSeen?.toISOString(),
-      created_by: this.createdBy,
-      created_at: this.createdAt.toISOString(),
-      updated_at: this.updatedAt.toISOString(),
+      status: this.status,
+      lastSeen: this.lastSeen?.toISOString(),
+      metadata: this.metadata,
+      createdAt: this.createdAt.toISOString(),
+      updatedAt: this.updatedAt.toISOString(),
+      componentDeployments: this.componentDeployments,
     };
   }
 
-  static fromJSON(data: IotDevice & { component_deployments?: ComponentDeployment[] }): Device {
+  static fromJSON(data: IotDevice & { componentDeployments?: ComponentDeployment[] }): Device {
     return new Device(data);
   }
 
@@ -302,25 +288,26 @@ export class Device {
     const deviceData: IotDevice = {
       id: 0, // Will be set by backend
       identifier: data.identifier || '',
-      device_type: data.device_type || DeviceTypeEnum.SENSOR_NODE,
+      deviceType: data.deviceType || DeviceTypeEnum.ESP32,
       model: data.model,
-      metadata: {},
-      ip_address: data.ip_address,
+      ipAddress: data.ipAddress,
       port: data.port,
       active: data.active ?? true,
-      last_seen: undefined,
-      created_by: undefined,
-      created_at: data.created_at || now,
-      updated_at: data.updated_at || now,
+      status: data.status || 'unknown',
+      lastSeen: data.lastSeen,
+      metadata: data.metadata,
+      createdAt: data.createdAt || now,
+      updatedAt: data.updatedAt || now,
+      componentDeployments: data.componentDeployments,
     };
     return new Device(deviceData);
   }
 
-  update(data: Partial<Pick<IotDevice, 'model' | 'ip_address' | 'port' | 'active'>>): Device {
+  update(data: Partial<Pick<IotDevice, 'model' | 'ipAddress' | 'port' | 'active' | 'metadata'>>): Device {
     const updatedData: IotDevice = {
       ...this.toJSON(),
       ...data,
-      updated_at: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     return new Device(updatedData);
   }
@@ -334,34 +321,42 @@ export class Device {
   }
 
   updateConnectionInfo(ipAddress: string, port?: number): Device {
-    return this.update({ ip_address: ipAddress, port });
+    return this.update({ ipAddress, port });
   }
 
   addComponentDeployment(deployment: ComponentDeployment): Device {
     const updatedDeployments = [...(this.componentDeployments || []), deployment];
-    return new Device({
+    const updatedData: IotDevice = {
       ...this.toJSON(),
-      component_deployments: updatedDeployments,
-    });
+      componentDeployments: updatedDeployments,
+      updatedAt: new Date().toISOString(),
+    };
+    return new Device(updatedData);
   }
 
   removeComponentDeployment(deploymentId: number): Device {
     const updatedDeployments = this.componentDeployments?.filter(
-      comp => comp.id !== deploymentId
+      deployment => deployment.id !== deploymentId
     ) || [];
-    return new Device({
+    const updatedData: IotDevice = {
       ...this.toJSON(),
-      component_deployments: updatedDeployments,
-    });
+      componentDeployments: updatedDeployments,
+      updatedAt: new Date().toISOString(),
+    };
+    return new Device(updatedData);
   }
 
   updateComponentDeployment(deploymentId: number, updates: Partial<ComponentDeployment>): Device {
-    const updatedDeployments = this.componentDeployments?.map(comp =>
-      comp.id === deploymentId ? { ...comp, ...updates } : comp
+    const updatedDeployments = this.componentDeployments?.map(deployment =>
+      deployment.id === deploymentId
+        ? { ...deployment, ...updates, updatedAt: new Date().toISOString() }
+        : deployment
     ) || [];
-    return new Device({
+    const updatedData: IotDevice = {
       ...this.toJSON(),
-      component_deployments: updatedDeployments,
-    });
+      componentDeployments: updatedDeployments,
+      updatedAt: new Date().toISOString(),
+    };
+    return new Device(updatedData);
   }
 } 

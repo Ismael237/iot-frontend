@@ -16,7 +16,7 @@ export const DeviceListPage: React.FC = () => {
     setError(null);
     try {
       const response = await apiClient.get('/devices?skip=0&limit=50');
-      setDevices(response.data || []);
+      setDevices(response || []);
     } catch (err: any) {
       setError(err?.message || 'Failed to load devices');
     } finally {

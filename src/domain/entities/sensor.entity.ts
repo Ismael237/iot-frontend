@@ -11,12 +11,10 @@ export interface Sensor {
 }
 
 export interface SensorReading {
-  id: number;
+  readingId: number;
   sensorId: number;
   value: number;
   timestamp: string;
-  quality: ReadingQuality;
-  metadata?: Record<string, any>;
 }
 
 export interface SensorStats {
@@ -33,9 +31,13 @@ export interface SensorStats {
 }
 
 export interface SensorDeployment {
-  id: number;
+  deploymentId: number;
   componentTypeId: number;
   deviceId: number;
+  lastIteration: string;
+  connectionStatus: ConnStatus;
+  lastValue: number;
+  lastValueTs: string;
   name: string;
   description?: string;
   location?: string;
@@ -54,7 +56,6 @@ export interface ComponentType {
   category: 'sensor' | 'actuator';
   unit?: string;
   description?: string;
-  metadata?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,10 +76,14 @@ export interface IotDevice {
 }
 
 export interface ComponentDeployment {
-  id: number;
+  deploymentId: number;
   componentTypeId: number;
   deviceId: number;
   active: boolean;
+  lastIteration: string;
+  connectionStatus: ConnStatus;
+  lastValue: number;
+  lastValueTs: string;
   createdAt: string;
   updatedAt: string;
   componentType: ComponentType;
@@ -126,6 +131,9 @@ export enum ReadingQuality {
 }
 
 export enum DeviceTypeEnum {
+  ESP32 = 'esp32',
+  ARDUINO = 'arduino',
+  RASPBERRY_PI = 'raspberry_pi',
   GATEWAY = 'gateway',
   SENSOR_NODE = 'sensor_node',
   ACTUATOR_NODE = 'actuator_node',
@@ -135,8 +143,8 @@ export enum DeviceTypeEnum {
 }
 
 export enum ConnStatus {
-  CONNECTED = 'connected',
-  DISCONNECTED = 'disconnected',
+  ONLINE = 'online',
+  OFFLINE = 'offline',
   CONNECTING = 'connecting',
   ERROR = 'error',
   UNKNOWN = 'unknown'

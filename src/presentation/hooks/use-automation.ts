@@ -14,7 +14,7 @@ export function useAutomation() {
     setError(null);
     try {
       const response = await apiClient.get('/automation/rules', { params });
-      setRules(response.data || []);
+      setRules(response || []);
     } catch (err: any) {
       setError(err?.message || 'Failed to load rules');
     } finally {
@@ -28,7 +28,7 @@ export function useAutomation() {
     setError(null);
     try {
       const response = await apiClient.get('/automation/alerts', { params });
-      setAlerts(response.data || []);
+      setAlerts(response || []);
     } catch (err: any) {
       setError(err?.message || 'Failed to load alerts');
     } finally {

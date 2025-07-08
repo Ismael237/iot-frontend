@@ -1,5 +1,5 @@
-import { BaseEntity, Severity } from './common.types';
-import { SensorReading, ComponentDeployment, ConnStatus } from './api.types';
+import type { BaseEntity, Severity } from './common.types';
+import type { ConnStatus } from './api.types';
 
 // Sensor Data Types
 export interface SensorDataPoint {
@@ -398,13 +398,13 @@ export interface SensorStats {
   error_count: number;
 }
 
-// Sensor Alerts
-export interface SensorAlert extends BaseEntity {
+// Sensor Alerts - Unified interface
+export interface SensorAlertExtended extends BaseEntity {
   sensor_id: number;
-  alert_type: SensorAlertType;
-  severity: Severity;
-  threshold_value: number;
-  current_value: number;
+  alert_type: 'threshold' | 'trend' | 'anomaly' | 'connection';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  threshold_value?: number;
+  current_value?: number;
   message: string;
   is_active: boolean;
   acknowledged: boolean;
@@ -424,7 +424,7 @@ export enum SensorAlertType {
 }
 
 // Sensor Aggregation
-export interface SensorAggregation {
+export interface SensorAggregationExtended {
   sensor_id: number;
   period: AggregationPeriod;
   start_time: string;
@@ -449,7 +449,7 @@ export enum AggregationPeriod {
 }
 
 // Sensor Trends
-export interface SensorTrend {
+export interface SensorTrendExtended {
   sensor_id: number;
   period: string;
   trend_direction: 'increasing' | 'decreasing' | 'stable' | 'fluctuating';
@@ -511,15 +511,15 @@ export interface CalibrationResult {
   recommendations?: string[];
 }
 
-// Sensor Maintenance
-export interface SensorMaintenance extends BaseEntity {
+// Sensor Maintenance - Unified interface
+export interface SensorMaintenanceExtended extends BaseEntity {
   sensor_id: number;
-  maintenance_type: MaintenanceType;
+  maintenance_type: 'calibration' | 'cleaning' | 'replacement' | 'inspection';
   description: string;
-  performed_by: number;
+  performed_by?: number;
   start_time: string;
   end_time?: string;
-  status: MaintenanceStatus;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'overdue';
   parts_replaced?: string[];
   cost?: number;
   notes?: string;
@@ -542,7 +542,7 @@ export enum MaintenanceStatus {
 }
 
 // Sensor Configuration
-export interface SensorConfig {
+export interface SensorConfigExtended {
   sensor_id: number;
   sampling_rate: number;
   averaging_window: number;

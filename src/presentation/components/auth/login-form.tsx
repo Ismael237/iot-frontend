@@ -15,7 +15,7 @@ import { Field } from '@ui/chakra/field';
 import { toaster } from '@ui/chakra/toaster';
 import { Button } from '@ui/button';
 import { PasswordInput } from '@ui/chakra/password-input';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 // Validation schema
 const loginSchema = z.object({
@@ -43,7 +43,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   onError,
   redirectTo,
 }) => {
-  const { login, isLoading, error } = useAuthStore();
+  const navigate = useNavigate();
+  const { login, isLoading, error, getCurrentUser } = useAuthStore();
 
   const {
     control,
@@ -56,7 +57,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     defaultValues: {
       email: '',
       password: '',
-      rememberMe: false,
+      rememberMe: true,
     },
   });
 
@@ -70,6 +71,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         rememberMe: data.rememberMe,
       });
 
+      await getCurrentUser();
+
       toaster.success({
         title: 'Login successful',
         description: 'Welcome back!',
@@ -81,7 +84,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
       // Redirect if specified
       if (redirectTo) {
-        window.location.href = redirectTo;
+        navigate(redirectTo);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed';
@@ -146,7 +149,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               control={control}
               name="rememberMe"
               render={({ field }) => (
-                <Field label="Remember me for 30 days" errorText={errors.rememberMe?.message} invalid={!!errors.rememberMe} disabled={isLoading}>
+                <Field errorText={errors.rememberMe?.message} invalid={!!errors.rememberMe} disabled={isLoading}>
                   <Checkbox.Root
                     colorPalette="blue"
                     checked={field.value}
@@ -154,7 +157,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
                   >
                     <Checkbox.HiddenInput />
                     <Checkbox.Control />
-                    <Checkbox.Label>Checkbox</Checkbox.Label>
+                    <Checkbox.Label>Remember me for 30 days</Checkbox.Label>
                   </Checkbox.Root>
                 </Field>
               )}
@@ -188,8 +191,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           Demo Credentials
         </Text>
         <Text fontSize="xs" color="gray.600" textAlign="center">
-          Email: admin@example.com<br />
-          Password: password123
+          Email: admin@smartfarm.local<br />
+          Password: admin1234
         </Text>
       </VStack>
 

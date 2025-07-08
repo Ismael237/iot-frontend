@@ -1,5 +1,5 @@
 import { api, buildUrl } from './axios-client';
-import { 
+import type { 
   LoginRequest, 
   LoginResponse, 
   RefreshTokenRequest, 
@@ -8,17 +8,16 @@ import {
   LogoutResponse,
   User,
   CreateUserRequest,
-  UpdateUserRequest
-} from '../../shared/types/api.types';
-import { 
-  LoginCredentials, 
+  UpdateUserRequest,
+} from '@shared/types/api.types';
+import type { 
   PasswordChangeRequest, 
   PasswordResetRequest, 
   PasswordResetConfirm,
   TwoFactorAuthRequest,
   TwoFactorAuthSetup,
   SessionInfo
-} from '../../shared/types/auth.types';
+} from '@shared/types/auth.types';
 
 // Auth API endpoints
 const AUTH_ENDPOINTS = {
@@ -42,7 +41,7 @@ export class AuthApi {
    */
   static async login(credentials: LoginRequest): Promise<LoginResponse> {
     const response = await api.post<LoginResponse>(AUTH_ENDPOINTS.LOGIN, credentials);
-    return response.data;
+    return response;
   }
 
   /**
@@ -50,7 +49,7 @@ export class AuthApi {
    */
   static async refreshToken(request: RefreshTokenRequest): Promise<RefreshTokenResponse> {
     const response = await api.post<RefreshTokenResponse>(AUTH_ENDPOINTS.REFRESH, request);
-    return response.data;
+    return response;
   }
 
   /**
@@ -58,7 +57,7 @@ export class AuthApi {
    */
   static async logout(request: LogoutRequest): Promise<LogoutResponse> {
     const response = await api.post<LogoutResponse>(AUTH_ENDPOINTS.LOGOUT, request);
-    return response.data;
+    return response;
   }
 
   /**
@@ -66,7 +65,7 @@ export class AuthApi {
    */
   static async getCurrentUser(): Promise<User> {
     const response = await api.get<User>(AUTH_ENDPOINTS.ME);
-    return response.data;
+    return response;
   }
 
   /**
@@ -74,7 +73,7 @@ export class AuthApi {
    */
   static async changePassword(request: PasswordChangeRequest): Promise<{ success: boolean }> {
     const response = await api.post<{ success: boolean }>(AUTH_ENDPOINTS.CHANGE_PASSWORD, request);
-    return response.data;
+    return response;
   }
 
   /**
@@ -82,7 +81,7 @@ export class AuthApi {
    */
   static async requestPasswordReset(request: PasswordResetRequest): Promise<{ success: boolean }> {
     const response = await api.post<{ success: boolean }>(AUTH_ENDPOINTS.RESET_PASSWORD, request);
-    return response.data;
+    return response;
   }
 
   /**
@@ -90,7 +89,7 @@ export class AuthApi {
    */
   static async confirmPasswordReset(request: PasswordResetConfirm): Promise<{ success: boolean }> {
     const response = await api.post<{ success: boolean }>(AUTH_ENDPOINTS.RESET_PASSWORD_CONFIRM, request);
-    return response.data;
+    return response;
   }
 
   /**
@@ -98,7 +97,7 @@ export class AuthApi {
    */
   static async setupTwoFactor(): Promise<TwoFactorAuthSetup> {
     const response = await api.post<TwoFactorAuthSetup>(AUTH_ENDPOINTS.TWO_FACTOR_SETUP);
-    return response.data;
+    return response;
   }
 
   /**
@@ -106,7 +105,7 @@ export class AuthApi {
    */
   static async verifyTwoFactor(request: TwoFactorAuthRequest): Promise<{ success: boolean }> {
     const response = await api.post<{ success: boolean }>(AUTH_ENDPOINTS.TWO_FACTOR_VERIFY, request);
-    return response.data;
+    return response;
   }
 
   /**
@@ -114,7 +113,7 @@ export class AuthApi {
    */
   static async disableTwoFactor(request: TwoFactorAuthRequest): Promise<{ success: boolean }> {
     const response = await api.post<{ success: boolean }>(AUTH_ENDPOINTS.TWO_FACTOR_DISABLE, request);
-    return response.data;
+    return response;
   }
 
   /**
@@ -122,7 +121,7 @@ export class AuthApi {
    */
   static async getSessions(): Promise<SessionInfo[]> {
     const response = await api.get<SessionInfo[]>(AUTH_ENDPOINTS.SESSIONS);
-    return response.data;
+    return response;
   }
 
   /**
@@ -131,7 +130,7 @@ export class AuthApi {
   static async revokeSession(sessionId: string): Promise<{ success: boolean }> {
     const url = buildUrl(AUTH_ENDPOINTS.REVOKE_SESSION, { session_id: sessionId });
     const response = await api.post<{ success: boolean }>(url);
-    return response.data;
+    return response;
   }
 
   /**
@@ -140,7 +139,7 @@ export class AuthApi {
   static async revokeAllSessions(): Promise<{ success: boolean }> {
     const url = buildUrl(AUTH_ENDPOINTS.REVOKE_SESSION, { all: true });
     const response = await api.post<{ success: boolean }>(url);
-    return response.data;
+    return response;
   }
 }
 
@@ -162,7 +161,7 @@ export class UserApi {
   }): Promise<{ data: User[]; total: number }> {
     const url = buildUrl(USER_ENDPOINTS.USERS, params);
     const response = await api.get<{ data: User[]; total: number }>(url);
-    return response.data;
+    return response;
   }
 
   /**
@@ -170,7 +169,7 @@ export class UserApi {
    */
   static async getUserById(id: number): Promise<User> {
     const response = await api.get<User>(USER_ENDPOINTS.USER_BY_ID(id));
-    return response.data;
+    return response;
   }
 
   /**
@@ -178,7 +177,7 @@ export class UserApi {
    */
   static async createUser(request: CreateUserRequest): Promise<User> {
     const response = await api.post<User>(USER_ENDPOINTS.USERS, request);
-    return response.data;
+    return response;
   }
 
   /**
@@ -186,7 +185,7 @@ export class UserApi {
    */
   static async updateUser(id: number, request: UpdateUserRequest): Promise<User> {
     const response = await api.patch<User>(USER_ENDPOINTS.USER_BY_ID(id), request);
-    return response.data;
+    return response;
   }
 
   /**
@@ -194,7 +193,7 @@ export class UserApi {
    */
   static async deleteUser(id: number): Promise<{ success: boolean }> {
     const response = await api.delete<{ success: boolean }>(USER_ENDPOINTS.USER_BY_ID(id));
-    return response.data;
+    return response;
   }
 
   /**
@@ -202,7 +201,7 @@ export class UserApi {
    */
   static async activateUser(id: number): Promise<User> {
     const response = await api.patch<User>(USER_ENDPOINTS.USER_BY_ID(id), { is_active: true });
-    return response.data;
+    return response;
   }
 
   /**
@@ -210,7 +209,7 @@ export class UserApi {
    */
   static async deactivateUser(id: number): Promise<User> {
     const response = await api.patch<User>(USER_ENDPOINTS.USER_BY_ID(id), { is_active: false });
-    return response.data;
+    return response;
   }
 }
 

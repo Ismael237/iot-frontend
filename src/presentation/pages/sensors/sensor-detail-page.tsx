@@ -11,7 +11,6 @@ import {
   HStack,
   VStack,
   Icon,
-  Progress,
   Stat,
   Tabs,
   Menu,
@@ -26,9 +25,9 @@ import {
   Dialog,
   Portal,
   createListCollection,
+  Spinner,
 } from '@chakra-ui/react';
 import {
-  Settings,
   Edit,
   Trash2,
   MoreVertical,
@@ -44,105 +43,162 @@ import {
   MapPin,
   Battery,
   Signal,
+  ArrowLeft,
+  Play,
+  Pause,
+  Eye,
+  LineChart,
+  AlertCircle,
+  Info,
+  Thermometer,
+  Droplets,
+  Lightbulb,
+  Gauge,
+  Zap,
+  Target,
+  Minus,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Field } from '@/presentation/components/ui/chakra/field';
 import { useColorModeValue } from '@presentation/components/ui/chakra/color-mode';
+import { useSensorStore } from '../../../domain/store/sensor-store';
+import { SensorType, SensorStatus, ReadingQuality, type SensorReading, type SensorStats, ConnStatus, type SensorDeployment } from '../../../domain/entities/sensor.entity';
+import { SENSOR_UNITS, getSensorUnitInfo } from '../../../shared/constants/sensor-units';
+import { SensorLineChart } from '../../components/charts/sensor-line-chart';
+import { componentApi, sensorApi } from '@infrastructure/api';
+import { getErrorMessage } from '@infrastructure/api/axios-client';
+import type { AxiosError } from 'axios';
 
-interface SensorReading {
-  id: string;
-  timestamp: string;
-  value: number;
-  unit: string;
-  quality: 'good' | 'fair' | 'poor';
-}
+// Composant pour l'icône du capteur
+const SensorIcon: React.FC<{ type: SensorType; size?: number }> = ({ type, size = 20 }) => {
+  const getIcon = () => {
+    switch (type) {
+      case SensorType.TEMPERATURE:
+        return <Thermometer size={size} />;
+      case SensorType.HUMIDITY:
+        return <Droplets size={size} />;
+      case SensorType.LIGHT:
+        return <Lightbulb size={size} />;
+      case SensorType.MOTION:
+        return <Activity size={size} />;
+      case SensorType.PRESSURE:
+        return <Gauge size={size} />;
+      case SensorType.SOUND:
+        return <AlertTriangle size={size} />;
+      case SensorType.GAS:
+        return <AlertCircle size={size} />;
+      default:
+        return <BarChart3 size={size} />;
+    }
+  };
 
-interface SensorDetail {
-  id: string;
-  name: string;
-  type: string;
-  location: string;
-  status: 'online' | 'offline' | 'error' | 'maintenance';
-  lastReading: {
-    value: number;
-    unit: string;
-    timestamp: string;
+  const getColor = () => {
+    switch (type) {
+      case SensorType.TEMPERATURE:
+        return 'red';
+      case SensorType.HUMIDITY:
+        return 'blue';
+      case SensorType.LIGHT:
+        return 'yellow';
+      case SensorType.MOTION:
+        return 'purple';
+      case SensorType.PRESSURE:
+        return 'cyan';
+      case SensorType.SOUND:
+        return 'orange';
+      case SensorType.GAS:
+        return 'pink';
+      default:
+        return 'gray';
+    }
   };
-  specifications: {
-    manufacturer: string;
-    model: string;
-    accuracy: string;
-    range: string;
-    resolution: string;
-  };
-  configuration: {
-    samplingRate: string;
-    threshold: number;
-    alerts: boolean;
-    calibration: string;
-  };
-  performance: {
-    uptime: number;
-    accuracy: number;
-    batteryLevel: number;
-    signalStrength: number;
-  };
-  readings: SensorReading[];
-}
 
-const mockSensorDetail: SensorDetail = {
-  id: 'sensor-001',
-  name: 'Living Room Temperature Sensor',
-  type: 'Temperature Sensor',
-  location: 'Living Room',
-  status: 'online',
-  lastReading: {
-    value: 23.5,
-    unit: '°C',
-    timestamp: '2024-01-15T14:30:00Z',
-  },
-  specifications: {
-    manufacturer: 'IoT Solutions Inc.',
-    model: 'TS-2000',
-    accuracy: '±0.5°C',
-    range: '-40°C to +85°C',
-    resolution: '0.1°C',
-  },
-  configuration: {
-    samplingRate: 'Every 30 seconds',
-    threshold: 25.0,
-    alerts: true,
-    calibration: '2024-01-01',
-  },
-  performance: {
-    uptime: 99.8,
-    accuracy: 98.5,
-    batteryLevel: 85,
-    signalStrength: 92,
-  },
-  readings: [
-    { id: '1', timestamp: '2024-01-15T14:30:00Z', value: 23.5, unit: '°C', quality: 'good' },
-    { id: '2', timestamp: '2024-01-15T14:29:30Z', value: 23.4, unit: '°C', quality: 'good' },
-    { id: '3', timestamp: '2024-01-15T14:29:00Z', value: 23.6, unit: '°C', quality: 'good' },
-    { id: '4', timestamp: '2024-01-15T14:28:30Z', value: 23.3, unit: '°C', quality: 'good' },
-    { id: '5', timestamp: '2024-01-15T14:28:00Z', value: 23.7, unit: '°C', quality: 'good' },
-    { id: '6', timestamp: '2024-01-15T14:27:30Z', value: 23.2, unit: '°C', quality: 'fair' },
-    { id: '7', timestamp: '2024-01-15T14:27:00Z', value: 23.8, unit: '°C', quality: 'good' },
-    { id: '8', timestamp: '2024-01-15T14:26:30Z', value: 23.1, unit: '°C', quality: 'good' },
-    { id: '9', timestamp: '2024-01-15T14:26:00Z', value: 23.9, unit: '°C', quality: 'good' },
-    { id: '10', timestamp: '2024-01-15T14:25:30Z', value: 23.0, unit: '°C', quality: 'good' },
-  ],
+  return (
+    <Box
+      p={2}
+      bg={`${getColor()}.100`}
+      color={`${getColor()}.600`}
+      borderRadius="lg"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+    >
+      {getIcon()}
+    </Box>
+  );
+};
+
+// Composant pour l'indicateur de tendance
+const TrendIndicator: React.FC<{ trend: 'up' | 'down' | 'stable'; value: number }> = ({ trend, value }) => {
+  const getTrendIcon = () => {
+    switch (trend) {
+      case 'up':
+        return <TrendingUp size={14} color="green" />;
+      case 'down':
+        return <TrendingDown size={14} color="red" />;
+      default:
+        return <Minus size={14} color="gray" />;
+    }
+  };
+
+  const getTrendColor = () => {
+    switch (trend) {
+      case 'up':
+        return 'green.500';
+      case 'down':
+        return 'red.500';
+      default:
+        return 'gray.500';
+    }
+  };
+
+  return (
+    <HStack gap={1}>
+      {getTrendIcon()}
+      <Text fontSize="xs" color={getTrendColor()} fontWeight="medium">
+        {value > 0 ? '+' : ''}{value.toFixed(1)}%
+      </Text>
+    </HStack>
+  );
+};
+
+// Composant pour l'indicateur de qualité
+const QualityIndicator: React.FC<{ quality: ReadingQuality }> = ({ quality }) => {
+  const getQualityColor = () => {
+    switch (quality) {
+      case ReadingQuality.EXCELLENT:
+        return 'green';
+      case ReadingQuality.GOOD:
+        return 'blue';
+      case ReadingQuality.FAIR:
+        return 'yellow';
+      case ReadingQuality.POOR:
+        return 'orange';
+      case ReadingQuality.INVALID:
+        return 'red';
+      default:
+        return 'gray';
+    }
+  };
+
+  return (
+    <Badge colorPalette={getQualityColor()} size="sm" variant="subtle">
+      {quality}
+    </Badge>
+  );
 };
 
 const getStatusIcon = (status: string) => {
   switch (status) {
-    case 'online':
+    case ConnStatus.ONLINE:
       return CheckCircle;
-    case 'offline':
+    case ConnStatus.OFFLINE || ConnStatus.UNKNOWN:
       return WifiOff;
-    case 'error':
+    case ConnStatus.ERROR:
       return AlertTriangle;
-    case 'maintenance':
+    case ConnStatus.CONNECTING:
       return Clock;
     default:
       return Wifi;
@@ -151,27 +207,14 @@ const getStatusIcon = (status: string) => {
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'online':
+    case ConnStatus.ONLINE:
       return 'green';
-    case 'offline':
+    case ConnStatus.OFFLINE || ConnStatus.UNKNOWN:
       return 'red';
-    case 'error':
+    case ConnStatus.ERROR:
       return 'orange';
-    case 'maintenance':
+    case ConnStatus.CONNECTING:
       return 'yellow';
-    default:
-      return 'gray';
-  }
-};
-
-const getQualityColor = (quality: string) => {
-  switch (quality) {
-    case 'good':
-      return 'green';
-    case 'fair':
-      return 'yellow';
-    case 'poor':
-      return 'red';
     default:
       return 'gray';
   }
@@ -180,10 +223,18 @@ const getQualityColor = (quality: string) => {
 export const SensorDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [sensor, setSensor] = useState<SensorDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const { open: isOpen, onOpen, onClose } = useDisclosure();
+
+  const [isChartPaused, setIsChartPaused] = useState(false);
+  const [chartData, setChartData] = useState<any[]>([]);
+  const { open: isConfigOpen, onOpen: onConfigOpen, onClose: onConfigClose } = useDisclosure();
+  const { open: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
   const [isEditing, setIsEditing] = useState(false);
+  const [readings, setReadings] = useState<SensorReading[]>([]);
+  const [stats, setStats] = useState<SensorStats[]>([]);
+  const [isLoadingReadings, setIsLoadingReadings] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [deployment, setDeployment] = useState<SensorDeployment | null>(null);
 
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -197,41 +248,144 @@ export const SensorDetailPage: React.FC = () => {
     ],
   });
 
-  useEffect(() => {
-    // Simulate API call
-    const loadSensor = async () => {
-      setIsLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setSensor(mockSensorDetail);
-      setIsLoading(false);
-    };
+  const fetchSensorReadings = async (deploymentId: number, params = {}) => {
+    setIsLoadingReadings(true);
+    try {
+      const response = await sensorApi.getSensorReadings(deploymentId, params);
+      setReadings(response);
+    } catch (error) {
+      setError(getErrorMessage(error as AxiosError));
+      console.error('Failed to fetch sensor readings:', error);
+    } finally {
+      setIsLoadingReadings(false);
+    }
+  };
 
-    loadSensor();
-  }, [id]);
+  const fetchDeploymentDetails = async (deploymentId: number) => {
+    try {
+      const response = await componentApi.getDeploymentDetails(deploymentId);
+      setDeployment(response);
+    } catch (error) {
+      setError(getErrorMessage(error as AxiosError));
+      console.error('Failed to fetch deployment details:', error);
+    }
+  };
+
+  const fetchSensorStats = async (deploymentId: number, params = {}) => {
+    setIsLoadingReadings(true);
+    try {
+      const response = await sensorApi.getSensorStats(deploymentId, params);
+      setStats(response);
+    } catch (error) {
+      setError(getErrorMessage(error as AxiosError));
+      console.error('Failed to fetch sensor stats:', error);
+    } finally {
+      setIsLoadingReadings(false);
+    }
+  };
+  
+  // Polling pour les données en temps réel
+  useEffect(() => {
+    if (!id) return;
+    
+    const deploymentId = parseInt(id);
+    fetchDeploymentDetails(deploymentId);
+    fetchSensorReadings(deploymentId, { limit: 100 });
+    fetchSensorStats(deploymentId, { limit: 100 });
+
+    // Polling toutes les 10 secondes pour les données en temps réel
+    const interval = setInterval(() => {
+      if (!isChartPaused) {
+        fetchDeploymentDetails(deploymentId);
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [id, isChartPaused]);
+
+  // Préparation des données pour le graphique
+  useEffect(() => {
+    if (!id) return;
+
+    const deploymentReadings = readings;
+    
+    if (deploymentReadings.length > 0) {
+      const chartDataPoints = deploymentReadings
+        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+        .map(reading => ({
+          timestamp: reading.timestamp,
+          value: reading.value,
+        }));
+      
+      setChartData(chartDataPoints);
+    }
+  }, [readings, id]);
+
+  // Calcul de la tendance
+  const calculateTrend = (): { trend: 'up' | 'down' | 'stable'; value: number } => {
+    if (chartData.length < 2) return { trend: 'stable', value: 0 };
+    
+    const recent = chartData.slice(-5);
+    const older = chartData.slice(-10, -5);
+    
+    if (older.length === 0) return { trend: 'stable', value: 0 };
+    
+    const recentAvg = recent.reduce((sum, r) => sum + r.value, 0) / recent.length;
+    const olderAvg = older.reduce((sum, r) => sum + r.value, 0) / older.length;
+    
+    const change = ((recentAvg - olderAvg) / olderAvg) * 100;
+    
+    if (Math.abs(change) < 1) return { trend: 'stable', value: 0 };
+    return { trend: change > 0 ? 'up' : 'down', value: Math.abs(change) };
+  };
 
   const handleRefresh = () => {
-    // Refresh sensor data
-    console.log('Refreshing sensor data...');
+    if (id) {
+      const deploymentId = parseInt(id);
+      fetchDeploymentDetails(deploymentId);
+    }
   };
 
   const handleEdit = () => {
     setIsEditing(true);
-    onOpen();
+    onConfigOpen();
   };
 
   const handleSave = () => {
     // Save sensor configuration
     console.log('Saving sensor configuration...');
     setIsEditing(false);
-    onClose();
+    onConfigClose();
   };
 
-  if (isLoading) {
+  const handleDelete = () => {
+    // Delete sensor
+    console.log('Deleting sensor...');
+    onDeleteClose();
+    navigate('/sensors');
+  };
+
+  const handleExport = () => {
+    // Export sensor data
+    const csvContent = chartData.map(point => 
+      `${point.timestamp},${point.value}`
+    ).join('\n');
+    
+    const blob = new Blob([`timestamp,value\n${csvContent}`], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sensor-${id}-data.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  if (isLoadingReadings) {
     return (
       <Container maxW="container.xl" py={8}>
         <VStack gap={8} align="stretch">
           <Box textAlign="center" py={12}>
-            <Icon as={RefreshCw} size="lg" color="gray.400" mb={4} />
+            <Spinner size="lg" colorPalette="blue" />
             <Text fontSize="lg" color="gray.500">Loading sensor details...</Text>
           </Box>
         </VStack>
@@ -239,39 +393,62 @@ export const SensorDetailPage: React.FC = () => {
     );
   }
 
-  if (!sensor) {
+  if (error) {
     return (
       <Container maxW="container.xl" py={8}>
         <VStack gap={8} align="stretch">
           <Alert.Root status="error">
             <Alert.Indicator />
-            <Alert.Title>Sensor not found</Alert.Title>
+            <Alert.Title>Error loading sensor!</Alert.Title>
+            <Alert.Description>{error}</Alert.Description>
           </Alert.Root>
         </VStack>
       </Container>
     );
   }
 
+  if (!deployment) {
+    return (
+      <Container maxW="container.xl" py={8}>
+        <VStack gap={8} align="stretch">
+          <Alert.Root status="warning">
+            <Alert.Indicator />
+            <Alert.Title>Sensor not found</Alert.Title>
+            <Alert.Description>Please select a sensor from the sensors list.</Alert.Description>
+          </Alert.Root>
+        </VStack>
+      </Container>
+    );
+  }
+
+  const trend = calculateTrend();
+  const unitInfo = getSensorUnitInfo(deployment.componentType.unit || '°C');
+
   return (
-    <Container maxW="container.xl" py={8}>
+    <Container px={2} maxW="container.xl" py={4}>
       <VStack gap={8} align="stretch">
         {/* Header */}
         <HStack justify="space-between" align="start">
           <Box>
             <HStack mb={2}>
               <IconButton variant="ghost" onClick={() => navigate('/sensors')}>
-                <Icon as={Settings} />
+                <ArrowLeft size={16} />
               </IconButton>
-              <Heading size="lg">{sensor.name}</Heading>
+              <HStack gap={3}>
+                <SensorIcon type={deployment.componentType.identifier as SensorType} />
+                <Heading size="lg">{deployment.componentType.name}</Heading>
+              </HStack>
             </HStack>
             <HStack gap={4}>
-              <Badge colorPalette={getStatusColor(sensor.status)} variant="subtle">
-                {sensor.status}
+              <Badge colorPalette={getStatusColor(deployment.connectionStatus)} variant="subtle">
+                {deployment.connectionStatus}
               </Badge>
-              <Text color="gray.600">{sensor.type}</Text>
+              <Text color="gray.600">{deployment.componentType.name}</Text>
               <HStack>
                 <Icon as={MapPin} size="sm" />
-                <Text fontSize="sm" color="gray.500">{sensor.location}</Text>
+                <Text fontSize="sm" color="gray.500">
+                  {deployment.location || 'Unknown location'}
+                </Text>
               </HStack>
             </HStack>
           </Box>
@@ -279,9 +456,15 @@ export const SensorDetailPage: React.FC = () => {
           <HStack gap={2}>
             <Button
               variant="outline"
-              onClick={handleRefresh}
+              onClick={() => setIsChartPaused(!isChartPaused)}
+              colorPalette={isChartPaused ? 'red' : 'green'}
             >
-              <Icon as={RefreshCw} />Refresh
+              {isChartPaused ? <Pause size={16} /> : <Play size={16} />}
+              {isChartPaused ? 'Paused' : 'Live'}
+            </Button>
+            <Button variant="outline" onClick={handleRefresh} loading={isLoadingReadings}>
+              <RefreshCw size={16} />
+              Refresh
             </Button>
             <Menu.Root>
               <Menu.Trigger asChild>
@@ -292,16 +475,16 @@ export const SensorDetailPage: React.FC = () => {
               <Menu.Positioner>
                 <Menu.Content>
                   <Menu.Item value="edit" onClick={handleEdit}>
-                    <Edit />Edit Configuration
+                    <Edit size={16} />
+                    Edit Configuration
                   </Menu.Item>
-                  <Menu.Item value="analytics">
-                    <BarChart3 />View Analytics
+                  <Menu.Item value="export" onClick={handleExport}>
+                    <Download size={16} />
+                    Export Data
                   </Menu.Item>
-                  <Menu.Item value="export-data">
-                    <Download />Export Data
-                  </Menu.Item>
-                  <Menu.Item value="delete-sensor" color="red.500">
-                    <Trash2 />Delete Sensor
+                  <Menu.Item value="delete" onClick={onDeleteOpen} color="red.500">
+                    <Trash2 size={16} />
+                    Delete Sensor
                   </Menu.Item>
                 </Menu.Content>
               </Menu.Positioner>
@@ -314,37 +497,40 @@ export const SensorDetailPage: React.FC = () => {
           <Card.Header>
             <HStack justify="space-between">
               <Heading size="md">Current Reading</Heading>
-              <HStack>
-                <Icon as={getStatusIcon(sensor.status)} color={`${getStatusColor(sensor.status)}.500`} />
-                <Text fontSize="sm" color="gray.500">
-                  Last updated: {new Date(sensor.lastReading.timestamp).toLocaleTimeString()}
-                </Text>
+              <HStack gap={2}>
+                <Icon as={getStatusIcon(deployment.connectionStatus)} 
+                      color={`${getStatusColor(deployment.connectionStatus)}.500`} />
+                <QualityIndicator quality={ReadingQuality.GOOD} />
+                {deployment && (
+                  <Text fontSize="sm" color="gray.500">
+                    Last updated: {new Date(deployment.lastValueTs).toLocaleTimeString()}
+                  </Text>
+                )}
               </HStack>
             </HStack>
           </Card.Header>
           <Card.Body>
-            <HStack justify="center" gap={8}>
-              <VStack>
-                <Text fontSize="6xl" fontWeight="bold" color="blue.500">
-                  {sensor.lastReading.value}
+            {deployment ? (
+              <HStack justify="center" gap={8}>
+                <VStack>
+                  <Text fontSize="6xl" fontWeight="bold" color="blue.500">
+                    {deployment.lastValue.toFixed(1)}
+                  </Text>
+                  <Text fontSize="xl" color="gray.600">{unitInfo.symbol}</Text>
+                  <TrendIndicator trend={trend.trend} value={trend.value} />
+                </VStack>
+              </HStack>
+            ) : (
+              <VStack gap={4} py={8}>
+                <Info size={48} color="gray.300" />
+                <Text color="gray.500" fontSize="lg">
+                  No readings available yet
                 </Text>
-                <Text fontSize="xl" color="gray.600">{sensor.lastReading.unit}</Text>
+                <Text color="gray.400" fontSize="sm">
+                  The sensor will start sending data once connected
+                </Text>
               </VStack>
-              <VStack align="start" gap={4}>
-                <HStack>
-                  <Icon as={Battery} color="green.500" />
-                  <Text>Battery: {sensor.performance.batteryLevel}%</Text>
-                </HStack>
-                <HStack>
-                  <Icon as={Signal} color="blue.500" />
-                  <Text>Signal: {sensor.performance.signalStrength}%</Text>
-                </HStack>
-                <HStack>
-                  <Icon as={Activity} color="purple.500" />
-                  <Text>Uptime: {sensor.performance.uptime}%</Text>
-                </HStack>
-              </VStack>
-            </HStack>
+            )}
           </Card.Body>
         </Card.Root>
 
@@ -353,14 +539,10 @@ export const SensorDetailPage: React.FC = () => {
           <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
             <Card.Body>
               <Stat.Root>
-                <Stat.Label>Uptime</Stat.Label>
-                <Stat.ValueText>{sensor.performance.uptime}%</Stat.ValueText>
+                <Stat.Label>Total Readings</Stat.Label>
+                <Stat.ValueText>{chartData.length}</Stat.ValueText>
                 <Stat.HelpText>
-                  <Progress.Root value={sensor.performance.uptime} size="sm" colorPalette="green" >
-                    <Progress.Track>
-                      <Progress.Range />
-                    </Progress.Track>
-                  </Progress.Root>
+                  <Stat.UpIndicator /> Last 24 hours
                 </Stat.HelpText>
               </Stat.Root>
             </Card.Body>
@@ -369,14 +551,15 @@ export const SensorDetailPage: React.FC = () => {
           <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
             <Card.Body>
               <Stat.Root>
-                <Stat.Label>Accuracy</Stat.Label>
-                <Stat.ValueText>{sensor.performance.accuracy}%</Stat.ValueText>
+                <Stat.Label>Average Value</Stat.Label>
+                <Stat.ValueText>
+                  {chartData.length > 0 
+                    ? (chartData.reduce((sum, point) => sum + point.value, 0) / chartData.length).toFixed(1)
+                    : '0'
+                  }
+                </Stat.ValueText>
                 <Stat.HelpText>
-                  <Progress.Root value={sensor.performance.accuracy} size="sm" colorPalette="blue" >
-                    <Progress.Track>
-                      <Progress.Range />
-                    </Progress.Track>
-                  </Progress.Root>
+                  <Stat.UpIndicator /> {unitInfo.symbol}
                 </Stat.HelpText>
               </Stat.Root>
             </Card.Body>
@@ -385,14 +568,15 @@ export const SensorDetailPage: React.FC = () => {
           <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
             <Card.Body>
               <Stat.Root>
-                <Stat.Label>Battery</Stat.Label>
-                <Stat.ValueText>{sensor.performance.batteryLevel}%</Stat.ValueText>
+                <Stat.Label>Min Value</Stat.Label>
+                <Stat.ValueText>
+                  {chartData.length > 0 
+                    ? Math.min(...chartData.map(point => point.value)).toFixed(1)
+                    : '0'
+                  }
+                </Stat.ValueText>
                 <Stat.HelpText>
-                  <Progress.Root value={sensor.performance.batteryLevel} size="sm" colorPalette="green" >
-                    <Progress.Track>
-                      <Progress.Range />
-                    </Progress.Track>
-                  </Progress.Root>
+                  <Stat.DownIndicator /> {unitInfo.symbol}
                 </Stat.HelpText>
               </Stat.Root>
             </Card.Body>
@@ -401,19 +585,50 @@ export const SensorDetailPage: React.FC = () => {
           <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
             <Card.Body>
               <Stat.Root>
-                <Stat.Label>Signal</Stat.Label>
-                <Stat.ValueText>{sensor.performance.signalStrength}%</Stat.ValueText>
+                <Stat.Label>Max Value</Stat.Label>
+                <Stat.ValueText>
+                  {chartData.length > 0 
+                    ? Math.max(...chartData.map(point => point.value)).toFixed(1)
+                    : '0'
+                  }
+                </Stat.ValueText>
                 <Stat.HelpText>
-                  <Progress.Root value={sensor.performance.signalStrength} size="sm" colorPalette="blue" >
-                    <Progress.Track>
-                      <Progress.Range />
-                    </Progress.Track>
-                  </Progress.Root>
+                  <Stat.UpIndicator /> {unitInfo.symbol}
                 </Stat.HelpText>
               </Stat.Root>
             </Card.Body>
           </Card.Root>
         </SimpleGrid>
+
+        {/* Real-time Chart */}
+        <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+          <Card.Header>
+            <HStack justify="space-between">
+              <Heading size="md">Real-time Readings</Heading>
+              <HStack gap={2}>
+                <Badge colorPalette={isChartPaused ? 'red' : 'green'} variant="subtle">
+                  {isChartPaused ? 'Paused' : 'Live'}
+                </Badge>
+                <Button size="sm" variant="outline" onClick={handleExport}>
+                  <Download size={16} />
+                  Export
+                </Button>
+              </HStack>
+            </HStack>
+          </Card.Header>
+          <Card.Body>
+            <SensorLineChart
+              data={chartData}
+              title={`${deployment.componentType.name} - Real-time Data`}
+              unit={unitInfo.symbol}
+              height={400}
+              showGrid={true}
+              showLegend={true}
+              color={deployment.connectionStatus === 'connected' ? '#38A169' : '#E53E3E'}
+              isLoading={isLoadingReadings}
+            />
+          </Card.Body>
+        </Card.Root>
 
         {/* Tabs */}
         <Card.Root bg={cardBg} borderWidth="1px" borderColor={borderColor}>
@@ -427,77 +642,74 @@ export const SensorDetailPage: React.FC = () => {
               </Tabs.List>
 
               <Tabs.Content value="recent-readings">
-                <VStack align="stretch" gap={4}>
+                <VStack align="stretch" gap={4} p={6}>
                   <HStack justify="space-between">
                     <Text fontWeight="medium">Recent Readings</Text>
-                    <Button size="sm" variant="outline">
-                      <Icon as={Download} />Export
-                    </Button>
+                    <Text fontSize="sm" color="gray.500">
+                      {chartData.length} readings
+                    </Text>
                   </HStack>
 
-                  <Box overflowX="auto">
-                    <Table.Root variant="outline" size="sm">
-                      <Table.Header>
-                        <Table.Row>
-                          <Table.Cell>Timestamp</Table.Cell>
-                          <Table.Cell>Value</Table.Cell>
-                          <Table.Cell>Quality</Table.Cell>
-                          <Table.Cell>Status</Table.Cell>
-                        </Table.Row>
-                      </Table.Header>
-                      <Table.Body>
-                        {sensor.readings.map((reading) => (
-                          <Table.Row key={reading.id}>
-                            <Table.Cell fontSize="sm">
-                              {new Date(reading.timestamp).toLocaleString()}
-                            </Table.Cell>
-                            <Table.Cell fontWeight="medium">
-                              {reading.value} {reading.unit}
-                            </Table.Cell>
-                            <Table.Cell>
-                              <Badge colorPalette={getQualityColor(reading.quality)} variant="subtle">
-                                {reading.quality}
-                              </Badge>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <Icon
-                                as={reading.quality === 'good' ? CheckCircle : AlertTriangle}
-                                color={`${getQualityColor(reading.quality)}.500`}
-                                size="md"
-                              />
-                            </Table.Cell>
+                  {chartData.length > 0 ? (
+                    <Box overflowX="auto">
+                      <Table.Root variant="outline" size="sm">
+                        <Table.Header>
+                          <Table.Row>
+                            <Table.Cell>Timestamp</Table.Cell>
+                            <Table.Cell>Value</Table.Cell>
                           </Table.Row>
-                        ))}
-                      </Table.Body>
-                    </Table.Root>
-                  </Box>
+                        </Table.Header>
+                        <Table.Body>
+                          {chartData.slice(-10).reverse().map((reading, index) => (
+                            <Table.Row key={index}>
+                              <Table.Cell fontSize="sm">
+                                {new Date(reading.timestamp).toLocaleString()}
+                              </Table.Cell>
+                              <Table.Cell fontWeight="medium">
+                                {reading.value.toFixed(2)} {unitInfo.symbol}
+                              </Table.Cell>
+                            </Table.Row>
+                          ))}
+                        </Table.Body>
+                      </Table.Root>
+                    </Box>
+                  ) : (
+                    <VStack gap={4} py={8}>
+                      <Info size={48} color="gray.300" />
+                      <Text color="gray.500">No readings available</Text>
+                    </VStack>
+                  )}
                 </VStack>
               </Tabs.Content>
 
               <Tabs.Content value="specifications">
-                <VStack align="stretch" gap={6}>
+                <VStack align="stretch" gap={6} p={6}>
                   <Box>
                     <Text fontWeight="medium" mb={3}>Device Information</Text>
                     <SimpleGrid columns={2} gap={4}>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Manufacturer</Text>
-                        <Text>{sensor.specifications.manufacturer}</Text>
+                        <Text fontSize="sm" color="gray.600">Device ID</Text>
+                        <Text>{deployment.device.identifier}</Text>
                       </Box>
                       <Box>
                         <Text fontSize="sm" color="gray.600">Model</Text>
-                        <Text>{sensor.specifications.model}</Text>
+                        <Text>{deployment.device.model || 'Unknown'}</Text>
                       </Box>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Accuracy</Text>
-                        <Text>{sensor.specifications.accuracy}</Text>
+                        <Text fontSize="sm" color="gray.600">Type</Text>
+                        <Text>{deployment.componentType.name}</Text>
                       </Box>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Range</Text>
-                        <Text>{sensor.specifications.range}</Text>
+                        <Text fontSize="sm" color="gray.600">Unit</Text>
+                        <Text>{unitInfo.label} ({unitInfo.symbol})</Text>
                       </Box>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Resolution</Text>
-                        <Text>{sensor.specifications.resolution}</Text>
+                        <Text fontSize="sm" color="gray.600">Location</Text>
+                        <Text>{deployment.location || 'Unknown'}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="sm" color="gray.600">Status</Text>
+                        <Text>{deployment.device.status}</Text>
                       </Box>
                     </SimpleGrid>
                   </Box>
@@ -505,41 +717,42 @@ export const SensorDetailPage: React.FC = () => {
               </Tabs.Content>
 
               <Tabs.Content value="configuration">
-                <VStack align="stretch" gap={6}>
+                <VStack align="stretch" gap={6} p={6}>
                   <Box>
                     <Text fontWeight="medium" mb={3}>Current Configuration</Text>
                     <SimpleGrid columns={2} gap={4}>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Sampling Rate</Text>
-                        <Text>{sensor.configuration.samplingRate}</Text>
+                        <Text fontSize="sm" color="gray.600">Active</Text>
+                        <Text>{deployment.active ? 'Yes' : 'No'}</Text>
                       </Box>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Alert Threshold</Text>
-                        <Text>{sensor.configuration.threshold} {sensor.lastReading.unit}</Text>
+                        <Text fontSize="sm" color="gray.600">Created</Text>
+                        <Text>{new Date(deployment.createdAt).toLocaleDateString()}</Text>
                       </Box>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Alerts Enabled</Text>
-                        <Text>{sensor.configuration.alerts ? 'Yes' : 'No'}</Text>
+                        <Text fontSize="sm" color="gray.600">Last Updated</Text>
+                        <Text>{new Date(deployment.updatedAt).toLocaleDateString()}</Text>
                       </Box>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Last Calibration</Text>
-                        <Text>{sensor.configuration.calibration}</Text>
+                        <Text fontSize="sm" color="gray.600">Description</Text>
+                        <Text>{deployment.description || 'No description'}</Text>
                       </Box>
                     </SimpleGrid>
                   </Box>
 
                   <Button variant="outline" onClick={handleEdit}>
-                    <Icon as={Edit} />Edit Configuration
+                    <Edit size={16} />
+                    Edit Configuration
                   </Button>
                 </VStack>
               </Tabs.Content>
 
               <Tabs.Content value="analytics">
-                <VStack align="stretch" gap={4}>
+                <VStack align="stretch" gap={4} p={6}>
                   <Text fontWeight="medium">Analytics & Trends</Text>
-                  <Box textAlign="center" py={8}>
-                    <Icon as={BarChart3} size="xl" color="gray.400" mb={4} />
-                    <Text color="gray.500">Analytics charts will be displayed here</Text>
+                  <Box textAlign="center" py={8} gap={2}>
+                    <LineChart size={48} color="gray.400"/>
+                    <Text color="gray.500">Advanced analytics will be displayed here</Text>
                   </Box>
                 </VStack>
               </Tabs.Content>
@@ -549,7 +762,7 @@ export const SensorDetailPage: React.FC = () => {
       </VStack>
 
       {/* Configuration Modal */}
-      <Dialog.Root open={isOpen} onOpenChange={onClose} size="lg">
+      <Dialog.Root open={isConfigOpen} onOpenChange={onConfigClose} size="lg">
         <Dialog.Backdrop />
         <Dialog.Positioner>
           <Dialog.Content>
@@ -558,10 +771,31 @@ export const SensorDetailPage: React.FC = () => {
             </Dialog.Header>
             <Dialog.Body pb={6}>
               <VStack gap={6} align="stretch">
+                <Field label="Sensor Name">
+                  <Input
+                    defaultValue={deployment.componentType.name}
+                    placeholder="Enter sensor name"
+                  />
+                </Field>
+
+                <Field label="Description">
+                  <Textarea 
+                    defaultValue={deployment.description || ''}
+                    placeholder="Enter sensor description..."
+                  />
+                </Field>
+
+                <Field label="Location">
+                  <Input
+                    defaultValue={deployment.location || ''}
+                    placeholder="Enter sensor location"
+                  />
+                </Field>
+
                 <Field label="Sampling Rate">
                   <Select.Root
                     collection={samplingRateCollection}
-                    defaultValue={[sensor.configuration.samplingRate]}
+                    defaultValue={['30s']}
                   >
                     <Select.HiddenSelect />
                     <Select.Label>Select sampling rate</Select.Label>
@@ -582,29 +816,18 @@ export const SensorDetailPage: React.FC = () => {
                   </Select.Root>
                 </Field>
 
-                <Field label="Alert Threshold">
-                  <Input
-                    type="number"
-                    defaultValue={sensor.configuration.threshold}
-                    placeholder="Enter threshold value"
-                  />
-                </Field>
-
-                <Field label="Enable Alerts">
-                  <Switch.Root defaultChecked={sensor.configuration.alerts} />
-                  <Switch.Label>Enable Alerts</Switch.Label>
+                <Field label="Enable Sensor">
+                  <Switch.Root defaultChecked={deployment.active} >
+                  <Switch.Label>Enable sensor</Switch.Label>
                   <Switch.Control>
                     <Switch.Thumb />
                   </Switch.Control>
-                </Field>
-
-                <Field label="Notes">
-                  <Textarea placeholder="Add any notes about this sensor..." />
+                  </Switch.Root>
                 </Field>
 
                 {isEditing && (
                   <HStack gap={4} justify="flex-end">
-                    <Button variant="outline" onClick={onClose}>
+                    <Button variant="outline" onClick={onConfigClose}>
                       Cancel
                     </Button>
                     <Button colorPalette="blue" onClick={handleSave}>
@@ -612,6 +835,38 @@ export const SensorDetailPage: React.FC = () => {
                     </Button>
                   </HStack>
                 )}
+              </VStack>
+            </Dialog.Body>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog.Root open={isDeleteOpen} onOpenChange={onDeleteClose} size="md">
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header>
+              Delete Sensor
+            </Dialog.Header>
+            <Dialog.Body pb={6}>
+              <VStack gap={4} align="stretch">
+                <Alert.Root status="warning">
+                  <Alert.Indicator />
+                  <Alert.Title>Are you sure?</Alert.Title>
+                  <Alert.Description>
+                    This action cannot be undone. This will permanently delete the sensor and all its data.
+                  </Alert.Description>
+                </Alert.Root>
+                
+                <HStack gap={4} justify="flex-end">
+                  <Button variant="outline" onClick={onDeleteClose}>
+                    Cancel
+                  </Button>
+                  <Button colorPalette="red" onClick={handleDelete}>
+                    Delete Sensor
+                  </Button>
+                </HStack>
               </VStack>
             </Dialog.Body>
           </Dialog.Content>

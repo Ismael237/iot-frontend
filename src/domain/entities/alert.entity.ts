@@ -1,38 +1,76 @@
+import { Alert } from '../../shared/types/api.types';
+
 export interface Alert {
   id: number;
   title: string;
   message: string;
   severity: AlertSeverity;
-  source: AlertSource;
-  sourceId?: number;
-  sourceName?: string;
-  metadata?: Record<string, any>;
+  automationRuleId?: number;
   isRead: boolean;
   isAcknowledged: boolean;
-  acknowledgedAt?: string;
-  acknowledgedBy?: number;
-  acknowledgedByUser?: User;
   createdAt: string;
-  updatedAt: string;
+  readAt?: string;
+  acknowledgedAt?: string;
 }
 
-export interface AlertSummary {
+export type AlertSeverity = 'info' | 'warning' | 'error' | 'critical';
+
+export interface CreateAlertRequest {
+  title: string;
+  message: string;
+  severity: AlertSeverity;
+  automationRuleId?: number;
+}
+
+export interface UpdateAlertRequest {
+  title?: string;
+  message?: string;
+  severity?: AlertSeverity;
+  isRead?: boolean;
+  isAcknowledged?: boolean;
+}
+
+export interface AlertStats {
   total: number;
   unread: number;
   unacknowledged: number;
-  bySeverity: Record<AlertSeverity, number>;
-  bySource: Record<AlertSource, number>;
-  recentAlerts: Alert[];
+  bySeverity: {
+    info: number;
+    warning: number;
+    error: number;
+    critical: number;
+  };
+  today: number;
+  thisWeek: number;
+  thisMonth: number;
 }
 
 export interface AlertFilter {
-  severity?: AlertSeverity[];
-  source?: AlertSource[];
+  severity?: AlertSeverity;
   isRead?: boolean;
   isAcknowledged?: boolean;
+  automationRuleId?: number;
   startDate?: string;
   endDate?: string;
-  searchTerm?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AlertSummary {
+  id: number;
+  title: string;
+  severity: AlertSeverity;
+  isRead: boolean;
+  isAcknowledged: boolean;
+  createdAt: string;
+  automationRuleId?: number;
+}
+
+export enum AlertSeverityEnum {
+  INFO = 'info',
+  WARNING = 'warning',
+  ERROR = 'error',
+  CRITICAL = 'critical'
 }
 
 export interface User {
@@ -44,30 +82,6 @@ export interface User {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-}
-
-export enum AlertSeverity {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  CRITICAL = 'critical',
-  INFO = 'info',
-  WARNING = 'warning',
-  ERROR = 'error'
-}
-
-export enum AlertSource {
-  AUTOMATION_RULE = 'automation_rule',
-  SYSTEM_MONITOR = 'system_monitor',
-  DEVICE_ALERT = 'device_alert',
-  SENSOR_ALERT = 'sensor_alert',
-  ACTUATOR_ALERT = 'actuator_alert',
-  ZONE_ALERT = 'zone_alert',
-  NETWORK_ALERT = 'network_alert',
-  SECURITY_ALERT = 'security_alert',
-  PERFORMANCE_ALERT = 'performance_alert',
-  MANUAL = 'manual',
-  EXTERNAL = 'external'
 }
 
 export enum UserRole {

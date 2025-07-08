@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { AutomationRule, Alert, ComparisonOperator, ActionType, AlertSeverity } from '../entities/automation.entity';
+import type { AutomationRule, Alert, ComparisonOperator, AutomationActionType, AlertSeverity } from '../entities/automation.entity';
+import { automationApi } from '../../infrastructure/api/automation-api';
 
-interface AutomationState {
+interface AutomationStoreState {
   rules: AutomationRule[];
   alerts: Alert[];
   selectedRule: AutomationRule | null;
@@ -30,7 +31,7 @@ interface CreateRuleData {
   sensorDeploymentId: number;
   operator: ComparisonOperator;
   thresholdValue: number;
-  actionType: ActionType;
+  actionType: AutomationActionType;
   alertTitle?: string;
   alertMessage?: string;
   alertSeverity?: AlertSeverity;
@@ -45,7 +46,7 @@ interface UpdateRuleData {
   description?: string;
   operator?: ComparisonOperator;
   thresholdValue?: number;
-  actionType?: ActionType;
+  actionType?: AutomationActionType;
   alertTitle?: string;
   alertMessage?: string;
   alertSeverity?: AlertSeverity;
@@ -54,7 +55,78 @@ interface UpdateRuleData {
   cooldownMinutes?: number;
 }
 
-export const useAutomationStore = create<AutomationState>((set, get) => ({
+// Validation utilities
+const isValidAutomationRule = (rule: any): rule is AutomationRule => {
+  return (
+    rule &&
+    typeof rule.ruleId === 'number' &&
+    typeof rule.name === 'string' &&
+    typeof rule.sensorDeploymentId === 'number' &&
+    typeof rule.operator === 'string' &&
+    typeof rule.thresholdValue === 'number' &&
+    typeof rule.actionType === 'string' &&
+    typeof rule.cooldownMinutes === 'number' &&
+    typeof rule.isActive === 'boolean'
+  );
+};
+
+const isValidAlert = (alert: any): alert is Alert => {
+  return (
+    alert &&
+    typeof alert.alertId === 'number' &&
+    typeof alert.title === 'string' &&
+    typeof alert.message === 'string' &&
+    typeof alert.severity === 'string'
+  );
+};
+
+const sanitizeRule = (rule: any): AutomationRule => {
+  if (!isValidAutomationRule(rule)) {
+    throw new Error('Invalid automation rule data');
+  }
+
+  return {
+    ruleId: rule.ruleId,
+    name: rule.name,
+    description: rule.description || '',
+    sensorDeploymentId: rule.sensorDeploymentId,
+    operator: rule.operator as ComparisonOperator,
+    thresholdValue: rule.thresholdValue,
+    actionType: rule.actionType as AutomationActionType,
+    alertTitle: rule.alertTitle,
+    alertMessage: rule.alertMessage,
+    alertSeverity: rule.alertSeverity as AlertSeverity,
+    targetDeploymentId: rule.targetDeploymentId,
+    actuatorCommand: rule.actuatorCommand,
+    actuatorParameters: rule.actuatorParameters || {},
+    cooldownMinutes: rule.cooldownMinutes,
+    isActive: rule.isActive,
+    lastTriggered: rule.lastTriggered,
+    createdAt: rule.createdAt || new Date().toISOString(),
+    updatedAt: rule.updatedAt || new Date().toISOString()
+  };
+};
+
+const sanitizeAlert = (alert: any): Alert => {
+  if (!isValidAlert(alert)) {
+    throw new Error('Invalid alert data');
+  }
+
+  return {
+    id: alert.id,
+    title: alert.title,
+    message: alert.message,
+    severity: alert.severity as AlertSeverity,
+    automationRuleId: alert.automationRuleId,
+    isRead: alert.isRead,
+    isAcknowledged: alert.isAcknowledged,
+    createdAt: alert.createdAt || new Date().toISOString(),
+    readAt: alert.readAt,
+    acknowledgedAt: alert.acknowledgedAt
+  };
+};
+
+export const useAutomationStore = create<AutomationStoreState>((set, get) => ({
   rules: [],
   alerts: [],
   selectedRule: null,
@@ -67,92 +139,16 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   fetchRules: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { isActive = true, skip = 0, limit = 20, search } = params;
+      const response = await automationApi.getRules(params);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock data
-      const mockRules: AutomationRule[] = [
-        {
-          id: 1,
-          name: 'High Temperature Alert',
-          description: 'Alert when temperature exceeds 30°C',
-          sensorDeploymentId: 1,
-          operator: ComparisonOperator.GREATER_THAN,
-          thresholdValue: 30,
-          actionType: ActionType.SEND_ALERT,
-          alertTitle: 'High Temperature Detected',
-          alertMessage: 'Temperature has exceeded 30°C in Zone A',
-          alertSeverity: AlertSeverity.HIGH,
-          cooldownMinutes: 15,
-          isActive: true,
-          lastTriggered: '2024-01-15T14:30:00Z',
-          triggerCount: 5,
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-15T14:30:00Z',
-          sensorDeployment: {} as any,
-          targetDeployment: undefined
-        },
-        {
-          id: 2,
-          name: 'Low Humidity Control',
-          description: 'Activate humidifier when humidity drops below 40%',
-          sensorDeploymentId: 2,
-          operator: ComparisonOperator.LESS_THAN,
-          thresholdValue: 40,
-          actionType: ActionType.ACTIVATE_ACTUATOR,
-          targetDeploymentId: 3,
-          actuatorCommand: 'on',
-          cooldownMinutes: 30,
-          isActive: true,
-          lastTriggered: '2024-01-15T12:15:00Z',
-          triggerCount: 3,
-          createdAt: '2024-01-02T00:00:00Z',
-          updatedAt: '2024-01-15T12:15:00Z',
-          sensorDeployment: {} as any,
-          targetDeployment: {} as any
-        },
-        {
-          id: 3,
-          name: 'Motion Detection',
-          description: 'Turn on lights when motion is detected',
-          sensorDeploymentId: 4,
-          operator: ComparisonOperator.EQUALS,
-          thresholdValue: 1,
-          actionType: ActionType.ACTIVATE_ACTUATOR,
-          targetDeploymentId: 5,
-          actuatorCommand: 'on',
-          cooldownMinutes: 5,
-          isActive: false,
-          lastTriggered: undefined,
-          triggerCount: 0,
-          createdAt: '2024-01-03T00:00:00Z',
-          updatedAt: '2024-01-10T00:00:00Z',
-          sensorDeployment: {} as any,
-          targetDeployment: {} as any
-        }
-      ];
+      // Validate and sanitize rules
+      const validRules = response
+        .filter(isValidAutomationRule)
+        .map(sanitizeRule);
 
-      let filteredRules = mockRules;
-      
-      if (isActive !== undefined) {
-        filteredRules = filteredRules.filter(rule => rule.isActive === isActive);
-      }
-      
-      if (search) {
-        filteredRules = filteredRules.filter(rule => 
-          rule.name.toLowerCase().includes(search.toLowerCase()) ||
-          rule.description?.toLowerCase().includes(search.toLowerCase())
-        );
-      }
-
-      const paginatedRules = filteredRules.slice(skip, skip + limit);
-      
       set({
-        rules: paginatedRules,
-        totalRules: filteredRules.length,
+        rules: validRules,
+        totalRules: response.total || validRules.length,
         isLoading: false
       });
     } catch (error) {
@@ -166,75 +162,16 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   fetchAlerts: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { severity, skip = 0, limit = 50, search } = params;
+      const response = await automationApi.getAlerts(params);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock data
-      const mockAlerts: Alert[] = [
-        {
-          id: 1,
-          title: 'High Temperature Detected',
-          message: 'Temperature has exceeded 30°C in Zone A',
-          severity: AlertSeverity.HIGH,
-          source: 'automation_rule' as any,
-          sourceId: 1,
-          sourceName: 'High Temperature Alert',
-          isRead: false,
-          isAcknowledged: false,
-          createdAt: '2024-01-15T14:30:00Z',
-          updatedAt: '2024-01-15T14:30:00Z'
-        },
-        {
-          id: 2,
-          title: 'Device Offline',
-          message: 'Sensor device SENSOR-001 has been offline for more than 5 minutes',
-          severity: AlertSeverity.MEDIUM,
-          source: 'device_alert' as any,
-          sourceId: 1,
-          sourceName: 'SENSOR-001',
-          isRead: true,
-          isAcknowledged: true,
-          acknowledgedAt: '2024-01-15T14:35:00Z',
-          acknowledgedBy: 1,
-          createdAt: '2024-01-15T14:25:00Z',
-          updatedAt: '2024-01-15T14:35:00Z'
-        },
-        {
-          id: 3,
-          title: 'Low Battery Warning',
-          message: 'Battery level is below 20% on device ACTUATOR-001',
-          severity: AlertSeverity.LOW,
-          source: 'device_alert' as any,
-          sourceId: 2,
-          sourceName: 'ACTUATOR-001',
-          isRead: false,
-          isAcknowledged: false,
-          createdAt: '2024-01-15T13:45:00Z',
-          updatedAt: '2024-01-15T13:45:00Z'
-        }
-      ];
+      // Validate and sanitize alerts
+      const validAlerts = response
+        .filter(isValidAlert)
+        .map(sanitizeAlert);
 
-      let filteredAlerts = mockAlerts;
-      
-      if (severity) {
-        filteredAlerts = filteredAlerts.filter(alert => alert.severity === severity);
-      }
-      
-      if (search) {
-        filteredAlerts = filteredAlerts.filter(alert => 
-          alert.title.toLowerCase().includes(search.toLowerCase()) ||
-          alert.message.toLowerCase().includes(search.toLowerCase())
-        );
-      }
-
-      const paginatedAlerts = filteredAlerts.slice(skip, skip + limit);
-      
       set({
-        alerts: paginatedAlerts,
-        totalAlerts: filteredAlerts.length,
+        alerts: validAlerts,
+        totalAlerts: response.total || validAlerts.length,
         isLoading: false
       });
     } catch (error) {
@@ -248,20 +185,9 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   createRule: async (ruleData: CreateRuleData) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await automationApi.createRule(ruleData);
       
-      const newRule: AutomationRule = {
-        id: Date.now(),
-        ...ruleData,
-        isActive: true,
-        lastTriggered: undefined,
-        triggerCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        sensorDeployment: {} as any,
-        targetDeployment: ruleData.targetDeploymentId ? {} as any : undefined
-      };
+      const newRule = sanitizeRule(response);
       
       set(state => ({
         rules: [...state.rules, newRule],
@@ -282,20 +208,16 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   updateRule: async (id: number, ruleData: UpdateRuleData) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await automationApi.updateRule(id, ruleData);
+      
+      const updatedRule = sanitizeRule(response);
       
       set(state => ({
-        rules: state.rules.map(rule => 
-          rule.id === id 
-            ? { ...rule, ...ruleData, updatedAt: new Date().toISOString() }
-            : rule
-        ),
+        rules: state.rules.map(rule => rule.id === id ? updatedRule : rule),
         isLoading: false
       }));
       
-      const updatedRule = get().rules.find(r => r.id === id);
-      return updatedRule!;
+      return updatedRule;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to update rule',
@@ -308,8 +230,7 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   deleteRule: async (id: number) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await automationApi.deleteRule(id);
       
       set(state => ({
         rules: state.rules.filter(rule => rule.id !== id),
@@ -328,20 +249,16 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   activateRule: async (id: number, isActive: boolean) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 300));
+      const response = await automationApi.activateRule(id, { isActive });
+      
+      const updatedRule = sanitizeRule(response);
       
       set(state => ({
-        rules: state.rules.map(rule => 
-          rule.id === id 
-            ? { ...rule, isActive, updatedAt: new Date().toISOString() }
-            : rule
-        ),
+        rules: state.rules.map(rule => rule.id === id ? updatedRule : rule),
         isLoading: false
       }));
       
-      const updatedRule = get().rules.find(r => r.id === id);
-      return updatedRule!;
+      return updatedRule;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to activate/deactivate rule',
@@ -354,8 +271,7 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   acknowledgeAlert: async (id: number) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await automationApi.acknowledgeAlert(id);
       
       set(state => ({
         alerts: state.alerts.map(alert => 
@@ -364,7 +280,6 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
                 ...alert, 
                 isAcknowledged: true, 
                 acknowledgedAt: new Date().toISOString(),
-                acknowledgedBy: 1,
                 updatedAt: new Date().toISOString()
               }
             : alert
@@ -381,10 +296,18 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   },
 
   setSelectedRule: (rule: AutomationRule | null) => {
+    if (rule && !isValidAutomationRule(rule)) {
+      console.warn('Invalid rule data provided to setSelectedRule');
+      return;
+    }
     set({ selectedRule: rule });
   },
 
   setSelectedAlert: (alert: Alert | null) => {
+    if (alert && !isValidAlert(alert)) {
+      console.warn('Invalid alert data provided to setSelectedAlert');
+      return;
+    }
     set({ selectedAlert: alert });
   },
 

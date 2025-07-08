@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { IotDevice, DeviceTypeEnum, ConnStatus } from '../entities/device.entity';
+import type { IotDevice, DeviceTypeEnum, ConnStatus } from '../../shared/types/api.types';
+import { deviceApi } from '../../infrastructure/api/device-api';
 
-interface DeviceState {
+interface DeviceStoreState {
   devices: IotDevice[];
   selectedDevice: IotDevice | null;
   isLoading: boolean;
@@ -35,7 +36,39 @@ interface UpdateDeviceData {
   active?: boolean;
 }
 
-export const useDeviceStore = create<DeviceState>((set, get) => ({
+// Validation utilities
+const isValidDevice = (device: any): device is IotDevice => {
+  return (
+    device &&
+    typeof device.id === 'number' &&
+    typeof device.identifier === 'string' &&
+    typeof device.deviceType === 'string' &&
+    typeof device.active === 'boolean'
+  );
+};
+
+const sanitizeDevice = (device: any): IotDevice => {
+  if (!isValidDevice(device)) {
+    throw new Error('Invalid device data');
+  }
+
+  return {
+    id: device.id,
+    identifier: device.identifier,
+    deviceType: device.deviceType as DeviceTypeEnum,
+    model: device.model,
+    ipAddress: device.ipAddress,
+    port: device.port,
+    active: device.active,
+    status: device.status as ConnStatus,
+    lastSeen: device.lastSeen,
+    createdAt: device.createdAt || new Date().toISOString(),
+    updatedAt: device.updatedAt || new Date().toISOString(),
+    componentDeployments: device.componentDeployments || [],
+  };
+};
+
+export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
   devices: [],
   selectedDevice: null,
   isLoading: false,
@@ -45,95 +78,16 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   fetchDevices: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      const { skip = 0, limit = 20, deviceType, activeOnly = true, search } = params;
+      const response = await deviceApi.getDevices(params);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock data
-      const mockDevices: IotDevice[] = [
-        {
-          id: 1,
-          identifier: 'GATEWAY-001',
-          deviceType: DeviceTypeEnum.GATEWAY,
-          model: 'IoT Gateway Pro',
-          ipAddress: '192.168.1.100',
-          port: 8080,
-          active: true,
-          status: ConnStatus.CONNECTED,
-          lastSeen: new Date().toISOString(),
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-01T00:00:00Z',
-          componentDeployments: []
-        },
-        {
-          id: 2,
-          identifier: 'SENSOR-001',
-          deviceType: DeviceTypeEnum.SENSOR_NODE,
-          model: 'Temperature Sensor',
-          ipAddress: '192.168.1.101',
-          port: 8081,
-          active: true,
-          status: ConnStatus.CONNECTED,
-          lastSeen: new Date().toISOString(),
-          createdAt: '2024-01-02T00:00:00Z',
-          updatedAt: '2024-01-02T00:00:00Z',
-          componentDeployments: []
-        },
-        {
-          id: 3,
-          identifier: 'ACTUATOR-001',
-          deviceType: DeviceTypeEnum.ACTUATOR_NODE,
-          model: 'Smart Relay',
-          ipAddress: '192.168.1.102',
-          port: 8082,
-          active: true,
-          status: ConnStatus.CONNECTED,
-          lastSeen: new Date().toISOString(),
-          createdAt: '2024-01-03T00:00:00Z',
-          updatedAt: '2024-01-03T00:00:00Z',
-          componentDeployments: []
-        },
-        {
-          id: 4,
-          identifier: 'CONTROLLER-001',
-          deviceType: DeviceTypeEnum.CONTROLLER,
-          model: 'IoT Controller',
-          ipAddress: '192.168.1.103',
-          port: 8083,
-          active: false,
-          status: ConnStatus.DISCONNECTED,
-          lastSeen: '2024-01-15T10:30:00Z',
-          createdAt: '2024-01-04T00:00:00Z',
-          updatedAt: '2024-01-15T10:30:00Z',
-          componentDeployments: []
-        }
-      ];
+      // Validate and sanitize devices
+      const validDevices = response
+        .filter(isValidDevice)
+        .map(sanitizeDevice);
 
-      let filteredDevices = mockDevices;
-      
-      if (deviceType) {
-        filteredDevices = filteredDevices.filter(device => device.deviceType === deviceType);
-      }
-      
-      if (activeOnly) {
-        filteredDevices = filteredDevices.filter(device => device.active);
-      }
-      
-      if (search) {
-        filteredDevices = filteredDevices.filter(device => 
-          device.identifier.toLowerCase().includes(search.toLowerCase()) ||
-          device.model?.toLowerCase().includes(search.toLowerCase()) ||
-          device.ipAddress?.includes(search)
-        );
-      }
-
-      const paginatedDevices = filteredDevices.slice(skip, skip + limit);
-      
       set({
-        devices: paginatedDevices,
-        totalDevices: filteredDevices.length,
+        devices: validDevices,
+        totalDevices: response.total || validDevices.length,
         isLoading: false
       });
     } catch (error) {
@@ -147,26 +101,12 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   fetchDeviceById: async (id: number) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 300));
+      const response = await deviceApi.getDeviceById(id);
       
-      const mockDevice: IotDevice = {
-        id,
-        identifier: `DEVICE-${id.toString().padStart(3, '0')}`,
-        deviceType: DeviceTypeEnum.SENSOR_NODE,
-        model: 'Generic IoT Device',
-        ipAddress: `192.168.1.${100 + id}`,
-        port: 8080 + id,
-        active: true,
-        status: ConnStatus.CONNECTED,
-        lastSeen: new Date().toISOString(),
-        createdAt: '2024-01-01T00:00:00Z',
-        updatedAt: '2024-01-01T00:00:00Z',
-        componentDeployments: []
-      };
+      const device = sanitizeDevice(response);
       
       set({ isLoading: false });
-      return mockDevice;
+      return device;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to fetch device',
@@ -179,17 +119,9 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   createDevice: async (deviceData: CreateDeviceData) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await deviceApi.createDevice(deviceData);
       
-      const newDevice: IotDevice = {
-        id: Date.now(),
-        ...deviceData,
-        status: ConnStatus.UNKNOWN,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        componentDeployments: []
-      };
+      const newDevice = sanitizeDevice(response);
       
       set(state => ({
         devices: [...state.devices, newDevice],
@@ -210,23 +142,9 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   updateDevice: async (id: number, deviceData: UpdateDeviceData) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await deviceApi.updateDevice(id, deviceData);
       
-      const updatedDevice: IotDevice = {
-        id,
-        identifier: `DEVICE-${id.toString().padStart(3, '0')}`,
-        deviceType: DeviceTypeEnum.SENSOR_NODE,
-        model: deviceData.model || 'Generic IoT Device',
-        ipAddress: deviceData.ipAddress || `192.168.1.${100 + id}`,
-        port: deviceData.port || 8080 + id,
-        active: deviceData.active ?? true,
-        status: ConnStatus.CONNECTED,
-        lastSeen: new Date().toISOString(),
-        createdAt: '2024-01-01T00:00:00Z',
-        updatedAt: new Date().toISOString(),
-        componentDeployments: []
-      };
+      const updatedDevice = sanitizeDevice(response);
       
       set(state => ({
         devices: state.devices.map(device => device.id === id ? updatedDevice : device),
@@ -246,8 +164,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   deleteDevice: async (id: number) => {
     set({ isLoading: true, error: null });
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await deviceApi.deleteDevice(id);
       
       set(state => ({
         devices: state.devices.filter(device => device.id !== id),
@@ -265,20 +182,18 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
 
   fetchDeviceStatus: async (id: number) => {
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      return {
-        deviceId: id,
-        status: ConnStatus.CONNECTED,
-        lastSeen: new Date().toISOString()
-      };
+      const response = await deviceApi.getDeviceStatus(id);
+      return response;
     } catch (error) {
       throw error;
     }
   },
 
   setSelectedDevice: (device: IotDevice | null) => {
+    if (device && !isValidDevice(device)) {
+      console.warn('Invalid device data provided to setSelectedDevice');
+      return;
+    }
     set({ selectedDevice: device });
   },
 

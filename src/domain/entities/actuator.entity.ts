@@ -11,28 +11,27 @@ export interface Actuator {
 }
 
 export interface ActuatorCommand {
-  id: number;
-  actuatorId: number;
+  actuatorCommandId: number;
+  deploymentId: number;
   command: string;
   parameters?: Record<string, any>;
   status: CommandStatus;
   executedAt?: string;
-  completedAt?: string;
-  result?: string;
-  error?: string;
   createdAt: string;
 }
 
 export interface ActuatorDeployment {
-  id: number;
+  deploymentId: number;
   componentTypeId: number;
   deviceId: number;
+  connectionStatus: ConnStatus;
+  lastValue: number;
+  lastValueTs: string;
   name: string;
   description?: string;
   location?: string;
+  unit?: string;
   active: boolean;
-  currentState: ActuatorState;
-  lastInteraction?: string;
   createdAt: string;
   updatedAt: string;
   componentType: ComponentType;
@@ -67,7 +66,7 @@ export interface IotDevice {
 }
 
 export interface ComponentDeployment {
-  id: number;
+  deploymentId: number;
   componentTypeId: number;
   deviceId: number;
   active: boolean;
@@ -97,13 +96,44 @@ export enum ActuatorType {
   CUSTOM = 'custom'
 }
 
-export enum ActuatorStatus {
+export interface ActuatorStatus {
+  deploymentId: number;
+  connectionStatus: ConnStatus;
+  lastInteraction?: string;
+}
+
+export interface SendCommandRequest {
+  command: string;
+  parameters?: Record<string, any>;
+}
+
+export enum CommandStatus {
+  PENDING = 'pending',
+  EXECUTING = 'executing',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
+  TIMEOUT = 'timeout'
+}
+
+export enum DeviceTypeEnum {
+  ESP32 = 'esp32',
+  ARDUINO = 'arduino',
+  RASPBERRY_PI = 'raspberry_pi',
+  GATEWAY = 'gateway',
+  SENSOR_NODE = 'sensor_node',
+  ACTUATOR_NODE = 'actuator_node',
+  CONTROLLER = 'controller',
+  DISPLAY = 'display',
+  CUSTOM = 'custom'
+}
+
+export enum ConnStatus {
   ONLINE = 'online',
   OFFLINE = 'offline',
+  CONNECTING = 'connecting',
   ERROR = 'error',
-  MAINTENANCE = 'maintenance',
-  BUSY = 'busy',
-  DISABLED = 'disabled'
+  UNKNOWN = 'unknown'
 }
 
 export enum ActuatorState {
@@ -121,30 +151,4 @@ export enum ActuatorState {
   POSITION_75 = 'position_75',
   POSITION_100 = 'position_100',
   CUSTOM = 'custom'
-}
-
-export enum CommandStatus {
-  PENDING = 'pending',
-  EXECUTING = 'executing',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  CANCELLED = 'cancelled',
-  TIMEOUT = 'timeout'
-}
-
-export enum DeviceTypeEnum {
-  GATEWAY = 'gateway',
-  SENSOR_NODE = 'sensor_node',
-  ACTUATOR_NODE = 'actuator_node',
-  CONTROLLER = 'controller',
-  DISPLAY = 'display',
-  CUSTOM = 'custom'
-}
-
-export enum ConnStatus {
-  CONNECTED = 'connected',
-  DISCONNECTED = 'disconnected',
-  CONNECTING = 'connecting',
-  ERROR = 'error',
-  UNKNOWN = 'unknown'
 } 

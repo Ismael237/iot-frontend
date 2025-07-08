@@ -13,9 +13,11 @@ import {
 import { Bell, Settings, LogOut, User, Search, Menu as MenuIcon } from 'lucide-react';
 import { useAuthStore } from '@domain/store/auth-store';
 import { useColorModeValue } from '@ui/chakra/color-mode';
+import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps { onOpenSidebar?: () => void }
 export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
+  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -23,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
   const handleLogout = async () => {
     try {
       await logout();
+      navigate('/login');
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -121,12 +124,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
                   </Text>
                 </VStack>
               </Menu.Item>
-              <Menu.Item value="settings">
-                <Settings size={16} />Settings
-              </Menu.Item>
-              <Menu.Item value="logout"
+              <Menu.Item
+                value="logout"
                 onClick={handleLogout}
                 color="red.500"
+                cursor="pointer"
               >
                 <LogOut size={16} />Sign Out
               </Menu.Item>
